@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
+import { toast } from "@jeswr/suite-ui";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { purgeNativePodCache } from "@/lib/session/native-pod-cache";
 import {
@@ -24,8 +26,19 @@ import {
   SignInError,
   type SignInHint,
   type SignInOptions,
+  type SignOutResult,
   type SuiteAccount,
 } from "./types";
+
+function finishSignOut(results: PromiseSettledResult<SignOutResult>[]): void {
+  // Sign-out-all can return the same notice for several accounts; show each message once.
+  const notices = new Set<string>();
+  for (const result of results)
+    if (result.status === "fulfilled" && result.value?.notice) notices.add(result.value.notice);
+  for (const notice of notices) toast(notice);
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
+}
 
 export interface AccountsContextValue {
   status: SessionStatus;
@@ -209,8 +222,7 @@ export function AccountsProvider({
       purgeNativePodCache(account.webId),
       backend?.signOut(account),
     ]);
-    const failure = results.find((result) => result.status === "rejected");
-    if (failure?.status === "rejected") throw failure.reason;
+    finishSignOut(results);
   };
   const signOutAll = async () => {
     ++generation.current;
@@ -231,8 +243,7 @@ export function AccountsProvider({
         backend?.signOut(account),
       ]),
     );
-    const failure = results.find((result) => result.status === "rejected");
-    if (failure?.status === "rejected") throw failure.reason;
+    finishSignOut(results);
   };
   const active = state.accounts.find((a) => a.id === state.activeId) ?? null;
   const reauth = () => {

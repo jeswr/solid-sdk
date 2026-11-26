@@ -14,6 +14,55 @@
   scroll-snap-type: x mandatory;
   scroll-padding-inline: 16px;
 }
+.tsk-board-columns {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  width: max-content;
+}
+.tsk-board[data-grouped] {
+  display: block;
+}
+.tsk-swimlane {
+  width: max-content;
+  margin-top: 16px;
+}
+.tsk-swimlane > h2 {
+  position: sticky;
+  left: 0;
+  width: fit-content;
+  max-width: calc(100vw - 48px);
+  overflow-wrap: anywhere;
+  margin: 0 0 8px;
+  font-size: var(--text-sm);
+}
+.tsk-board-group {
+  display: inline-grid;
+  gap: 4px;
+  min-width: 160px;
+  margin-top: 12px;
+  font-size: var(--text-sm);
+}
+.tsk-board-group select {
+  min-height: 44px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--foreground);
+}
+.tsk-section-header[data-over-wip] {
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-md);
+  background: var(--warning);
+  color: var(--warning-foreground);
+}
+.tsk-section-header[data-over-wip] .tsk-count {
+  color: inherit;
+}
+.tsk-section-header[data-over-wip] .suite-editable {
+  color: inherit;
+}
 .tsk-board-column {
   display: flex;
   flex: 0 0 auto;
@@ -39,6 +88,9 @@
 }
 .tsk-board-body {
   min-height: 44px;
+}
+.tsk-swimlane .tsk-board-body {
+  min-height: 88px;
 }
 .tsk-board-cards {
   display: grid;
@@ -110,7 +162,8 @@
 .tsk-board-add .tsk-add-section {
   margin-top: 0;
 }
-.tsk-board :focus-visible {
+.tsk-board :focus-visible,
+.tsk-board-group select:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }

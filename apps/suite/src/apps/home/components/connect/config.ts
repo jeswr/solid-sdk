@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // Public configuration belongs to this host, never to pod-connectors. Keep static
 // property reads: Next replaces NEXT_PUBLIC_* at build time in browser bundles.
@@ -31,8 +32,20 @@ export const registry = createRegistry({
     process.env.NEXT_PUBLIC_CONNECTOR_NOTION_TOKEN_PROXY_URL,
   ),
   dropbox: publicConfig(process.env.NEXT_PUBLIC_CONNECTOR_DROPBOX_CLIENT_ID),
+  whoop: publicConfig(
+    process.env.NEXT_PUBLIC_CONNECTOR_WHOOP_CLIENT_ID,
+    process.env.NEXT_PUBLIC_CONNECTOR_WHOOP_TOKEN_PROXY_URL,
+  ),
 });
 export const entries = catalogue(
   registry,
   process.env.NEXT_PUBLIC_SHOW_COMING_SOON_CONNECTORS === "1",
 );
+
+/** Personal public clients never replace a client configured by the deployment. */
+export function spotifyAdapterFor(personalClientId: string) {
+  const adapter = registry.adapterById("spotify");
+  if (!adapter?.oauth || adapter.oauth.clientId || !/^[a-fA-F0-9]{32}$/.test(personalClientId))
+    return adapter;
+  return { ...adapter, oauth: { ...adapter.oauth, clientId: personalClientId.toLowerCase() } };
+}

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
@@ -35,6 +36,26 @@ function streamed(text: string, chunkSize = 16 * 1024): ImportFile {
 }
 
 describe("JSON allocation limits", () => {
+  it("reports unselected array members without counting selected, empty or oversized envelopes twice", async () => {
+    const skip = vi.fn();
+    const unselected = vi.fn();
+    const file = streamed(
+      JSON.stringify([
+        { unknown: 1 },
+        { rows: [{ id: 1 }, { ignored: "x".repeat(MAX_JSON_TOKEN_BYTES) }] },
+        { rows: [] },
+        { row: { id: 2 } },
+        { unknown: 2 },
+      ]),
+    );
+    const entries = [];
+    for await (const entry of jsonEntries(file, ["[].rows"], ["[].row"], skip, unselected))
+      entries.push(entry.value);
+    expect(entries).toEqual([{ id: 1 }, { id: 2 }]);
+    expect(skip).toHaveBeenCalledOnce();
+    expect(unselected.mock.calls).toEqual([[""], [""]]);
+  });
+
   it.each([1, 7, 4096])("preserves escapes and UTF-8 across %i-byte chunks", async (size) => {
     const value = { title: 'Synthetic café 🌍 " \\ \n \u0001', nested: [true, null, -1.25e3] };
     expect(await collect(streamed(JSON.stringify([value]), size))).toEqual([{ path: "", value }]);

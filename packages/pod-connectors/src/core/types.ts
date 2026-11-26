@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The integration adapter contract (docs/integrations-catalog.md §"The common
  * adapter shape"). An adapter pulls a user's data from a platform API,
@@ -10,13 +11,14 @@
 import type { DatasetCore } from "@rdfjs/types";
 import type { RunBudget, RunLimits } from "./budget.js";
 
-/** Catalog tiers (docs/integrations-catalog.md). Only Tier A ships adapters. */
+/** Catalog tiers (docs/integrations-catalog.md). Tier B includes approval-gated and CLI-only sources. */
 export type IntegrationTier = "A" | "B" | "C";
 
 /** How the user connects. */
 export type AuthKind =
   | "oauth-pkce" // end-user OAuth2 authorization-code + PKCE in a popup
   | "export-file" // Tier C: parse the platform's official data export
+  | "account-cli" // unofficial account API; Node CLI only
   | "none"; // metadata-only catalog entry (Tier B placeholder)
 
 /** Static, render-ready description of an integration. No RDF, no I/O. */
@@ -26,6 +28,8 @@ export interface IntegrationMetadata {
   readonly name: string;
   readonly tier: IntegrationTier;
   readonly authKind: AuthKind;
+  /** Live account access requires the Node CLI; requirements contain the how-to. */
+  readonly cliOnly?: boolean;
   /** OAuth scopes requested (empty for non-OAuth kinds). */
   readonly scopes: readonly string[];
   /** Category ids (`src/lib/categories.ts`) this integration writes into. */
@@ -93,6 +97,11 @@ export interface NormalisedDoc {
   readonly category: string;
   /** RDF class to register in the Type Index for the document's container. */
   readonly forClass: string;
+  /**
+   * Further RDF classes the document holds, registered for the same container (for example
+   * health observations kept beside the workouts they describe).
+   */
+  readonly additionalClasses?: readonly string[];
   /** The document content, built via the typed vocab wrappers. */
   readonly dataset: DatasetCore;
   /**
@@ -100,6 +109,8 @@ export interface NormalisedDoc {
    * pages: incoming deterministic subjects replace their descriptions; absent subjects survive.
    */
   readonly writeMode?: "replace" | "merge";
+  /** Refuse an existing resource without a strong ETag before a read-modify-write. */
+  readonly requirePrecondition?: boolean;
   /** Source document for items without their own schema:url (e.g. file exports). */
   readonly sourceUrl?: string;
   /**
@@ -139,13 +150,23 @@ export interface BinaryDoc {
 export interface WrittenBinary {
   readonly url: string;
   readonly created: boolean;
+  /** Whether a completed binary write used a create-only precondition. */
+  readonly writeCreated?: boolean;
+  /** ETag from the write response, when available for private-destination cleanup. */
+  readonly writeEtag?: string;
 }
 
 /** A doc the runner wrote, with its final URL. */
 export interface WrittenDoc {
   readonly url: string;
+  /** Whether the completed write used a create-only precondition. */
+  readonly writeCreated?: boolean;
+  /** ETag from the write response, when available for private-destination cleanup. */
+  readonly writeEtag?: string;
   readonly category: string;
   readonly forClass: string;
+  /** Further classes registered for the same container as `forClass`. */
+  readonly additionalClasses?: readonly string[];
   readonly skipRegistration?: boolean;
   /** Absolute container registered instead of the document's own container. */
   readonly registrationContainer?: string;
@@ -177,8 +198,9 @@ export interface ImportContext {
   /**
    * Read a previously-written document back (for incremental imports that
    * merge new items into an existing collection). `undefined` when absent.
+   * An optional inspection can reject the stored dataset before the session retains a copy.
    */
-  read(slug: string): Promise<DatasetCore | undefined>;
+  read(slug: string, inspect?: (dataset: DatasetCore) => void): Promise<DatasetCore | undefined>;
   /** Write RDF; defaults to the precondition retained by a preceding read of this URL. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
   /**
@@ -216,6 +238,9 @@ export interface ImportContext {
 
 /** What `import()` returns (documents are reported by the runner). */
 export interface ImportOutcome {
+  /** Actionable notices, including a successfully saved partial batch. Fixed adapter
+   * strings only: never provider-supplied text (hosts print them). */
+  readonly warnings?: readonly string[];
   /** Opaque incremental cursor for the next import, where the API supports it. */
   readonly cursor?: string;
   /**
@@ -233,6 +258,8 @@ export interface ImportOutcome {
    * leaves that state in place, so it must be safe to resume from it again.
    */
   readonly commit?: () => Promise<void>;
+  /** Source fields or products without a supported vocabulary mapping. */
+  readonly unsupported?: readonly string[];
 }
 
 /** One recorded fixture route for the typed fake fetch.
@@ -264,13 +291,15 @@ export interface ConnectorState {
 
 export interface ConnectorStateOptions {
   readonly state?: ConnectorState;
-  /** Called after completion or failure; failures retain the previous checkpoint. */
+  /** Reports confirmed success or the previous state on failure. After-write privacy refusals report no state. */
   readonly onState?: (state: ConnectorState) => void;
 }
 
 export interface IntegrationAdapter {
   /** Optional factory bounds, snapshotted and tightened by host run limits. */
   readonly limits?: Partial<RunLimits>;
+  /** Optional bounded history for polling; older provenance links can outlive their summaries. */
+  readonly maxRunActivities?: number;
   readonly vocabMap?: VocabMap;
   readonly metadata: IntegrationMetadata;
   /** Present iff `authKind === "oauth-pkce"`. */
@@ -290,11 +319,24 @@ export type WriteConditions =
   | { readonly ifMatch?: string; readonly ifNoneMatch?: never }
   | { readonly ifMatch?: never; readonly ifNoneMatch: "*" };
 
+/** Validators from the write response only. */
+export interface PrivateWriteVersion {
+  readonly etag?: string;
+}
+
 /** One class-to-container Type Index registration. */
 export interface TypeRegistrationRequest {
   readonly forClass: string;
   readonly container: string;
 }
+
+/** Returns a rejection when a session has refused further mutations. Check at dispatch. */
+export type MutationGuard = () => Promise<never> | undefined;
+
+type PrivateDestinationVerifier = ((url: string) => Promise<boolean>) & {
+  /** Verification that can create containers must check the guard before doing so. */
+  readonly beforeWrite?: (url: string, guard: MutationGuard) => Promise<boolean>;
+};
 
 /** Host-owned storage port, bound to one connector's document container. */
 export interface PodWriter {
@@ -302,20 +344,46 @@ export interface PodWriter {
   readonly webId?: string;
   /** Resolve an adapter-relative slug within its container. */
   resolve(slug: string): string;
+  /** Verify the exact destination and its containing policy. Required for sensitive imports. */
+  verifyPrivateDestination?: PrivateDestinationVerifier;
+  /** Confirm that the written resource and its containing policy are owner-only. */
+  confirmPrivateWrite?(
+    url: string,
+    version: PrivateWriteVersion,
+    observeEtag?: (etag: string) => void,
+  ): Promise<boolean>;
+  /** Remove a refused create and confirm absence, using only the supplied cleanup signal. */
+  cleanupPrivateWrite?(
+    slug: string,
+    options: { etag: string; signal: AbortSignal },
+  ): Promise<boolean>;
   /** Read existing RDF and its ETag; undefined only for a missing document. */
   read(slug: string): Promise<{ dataset: DatasetCore; etag: string | null } | undefined>;
   /** Write RDF, preserving the caller's conditional-write precondition. */
-  write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
+  write(
+    doc: NormalisedDoc,
+    conditions?: WriteConditions,
+    guard?: MutationGuard,
+  ): Promise<WrittenDoc>;
+  /** Notify the host after the runner accepts a payload write. */
+  onWriteAccepted?(url: string, doc: NormalisedDoc): void;
   /**
    * Optional binary port with the same container confinement as `write`. `"create"` sends
    * `If-None-Match: *` and reports a 412 as an existing resource; `"replace"` reads the
    * current ETag first and sends `If-Match` (or `If-None-Match: *` when absent).
    */
-  writeBinary?(doc: BinaryDoc): Promise<WrittenBinary>;
+  writeBinary?(doc: BinaryDoc, guard?: MutationGuard): Promise<WrittenBinary>;
   /** Optional delete port with the same confinement; 404 counts as already deleted. */
-  remove?(slug: string, conditions?: { readonly ifMatch?: string }): Promise<void>;
+  remove?(
+    slug: string,
+    conditions?: { readonly ifMatch?: string },
+    guard?: MutationGuard,
+  ): Promise<void>;
   /** Ensure the distinct class/container registrations and report the index used. */
-  registerType(registrations: readonly TypeRegistrationRequest[]): Promise<{ indexUrl: string }>;
+  registerType(
+    registrations: readonly TypeRegistrationRequest[],
+    guard?: MutationGuard,
+  ): Promise<{ indexUrl: string }>;
 }
 
 /** Host-owned source API transport, already authenticated for this source. */

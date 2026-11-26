@@ -128,6 +128,7 @@ export function aggregateTaskStats(
     // Gate links and seals carry integrity evidence rather than task instrumentation.
     if (
       record.type === "ledger-checkpoint" ||
+      record.type === "personal-data-read" ||
       record.type === "record-anchor" ||
       record.type === "gate-decision"
     )

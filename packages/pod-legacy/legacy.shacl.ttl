@@ -1,0 +1,34 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix legacy: <https://jeswr.org/ns/legacy#> .
+@prefix schema: <https://schema.org/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+@prefix odrl: <http://www.w3.org/ns/odrl/2/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+# The identity sector describes people and claims, not inactivity plans.
+# This independent profile reuses standard properties and requires every safety field.
+# Preserve exact RDF IRI identities. HTTPS and in-pod scope are stricter facade policy;
+# shape patterns would cause the runtime URL projection to normalize WebIDs and scopes.
+legacy:LegacyPlanShape a sh:NodeShape ; sh:targetClass legacy:LegacyPlan ;
+ sh:property [ sh:path dct:creator ; sh:name "owner" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;  ] ;
+ sh:property [ sh:path schema:contentUrl ; sh:name "storage" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;  ] ;
+ # Disabled plans may have no contacts; enabled plans require one in facade policy.
+ sh:property [ sh:path legacy:contact ; sh:name "contactUrls" ; sh:nodeKind sh:IRI ; sh:minCount 0 ; sh:maxCount 50 ;  ] ;
+ sh:property [ sh:path legacy:inactivityMonths ; sh:name "inactivityMonths" ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ; sh:minInclusive 1 ; sh:maxInclusive 120000 ; ] ;
+ sh:property [ sh:path legacy:warningDays ; sh:name "warningDays" ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 10 ; sh:minInclusive 1 ; sh:maxInclusive 36600 ; ] ;
+ sh:property [ sh:path legacy:notifyMeBy ; sh:name "notifyMeBy" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 2 ; sh:in ( "settings" "tray" ) ; ] ;
+ sh:property [ sh:path schema:lastInteractionDate ; sh:name "lastActivity" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ;  ] ;
+ sh:property [ sh:path schema:isActive ; sh:name "enabled" ; sh:datatype xsd:boolean ; sh:minCount 1 ; sh:maxCount 1 ;  ] ;
+ sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ;  ] ;
+ sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ;  ] .
+legacy:LegacyContactShape a sh:NodeShape ; sh:targetClass legacy:LegacyContact ;
+ sh:property [ sh:path schema:url ; sh:name "webId" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;  ] ;
+ sh:property [ sh:path vcard:fn ; sh:name "displayName" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ; ] ;
+ sh:property [ sh:path legacy:scope ; sh:name "scope" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "whole-pod" "containers" ) ; ] ;
+ sh:property [ sh:path odrl:target ; sh:name "targets" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 100 ;  ] ;
+ sh:property [ sh:path odrl:action ; sh:name "mode" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( odrl:read ) ; ] .

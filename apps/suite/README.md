@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Solid Suite
 
 The Next.js application is `@jeswr/app-suite`. Use Node 24 and the root pnpm workspace.
@@ -25,6 +26,24 @@ without query or fragment. Session-opening failures offer Retry, which reopens t
 The audit, Contacts and agent readers share guarded-fetch's bounded strict UTF-8 reader;
 malformed UTF-8 fails closed. Their existing byte budgets and size-error messages remain.
 Assistant visual snapshots run only for 375-light and 1280-dark; axe runs in all six projects.
+
+## Solid session ownership
+
+The Solid session backend retains the accepted pod-auth Identity, including its public `grantId`,
+beside the shell account. Sign-out, expired-session cleanup and rejected identities use conditional
+retirement. A newer grant, even for the same WebID, survives stale cleanup; skipped retirement
+preserves backend state and blocks reauthentication. Missing ownership metadata produces a warning;
+ownership changes produce an informational diagnostic. A remembered account row without an accepted
+Identity cannot authorize retirement after reload; restore must establish its grant snapshot first.
+
+## Spotify connection
+
+Spotify Connect offers streaming-history ZIP/JSON import without a Spotify Web API app,
+or live PKCE with a personal public Client ID. The form shows the callback URI and setup
+steps, validates 32 hexadecimal characters, and saves `connect.spotify-client-id` through
+suite-sdk pod-backed preferences. A deployment's `NEXT_PUBLIC_CONNECTOR_SPOTIFY_CLIENT_ID`
+takes precedence. No client secret is used. Music includes monthly imported Spotify
+history; short plays are retained, matching the scrobble import's duration policy.
 
 ## Pilot feedback
 
@@ -117,3 +136,14 @@ before the handler runs, with a non-JSON 413. Each audio request carries just on
 of at most 3 MB; the final JSON submit is capped at 1 MB. Ten clips never share one request.
 All turn, audio and submit failures, including non-JSON platform errors, show friendly local
 messages and keep the in-memory download available.
+
+## WHOOP connection
+
+Home → Connect services → WHOOP offers its fixture-backed demo/OAuth connection and
+**Import an export file** under one catalogue entry in Body & Health. Configure
+`NEXT_PUBLIC_CONNECTOR_WHOOP_CLIENT_ID` with the host's registered public client id
+and `NEXT_PUBLIC_CONNECTOR_WHOOP_TOKEN_PROXY_URL` with its token-exchange proxy for OAuth.
+The file option accepts WHOOP's Data Export ZIP or an individual CSV and
+uses the shared pod-connectors adapter. See that package's README for input caps,
+metric coverage and unsupported scores. Imports keep the connector container layout;
+the Health app's current fixed storage root and metric catalogue are unchanged.

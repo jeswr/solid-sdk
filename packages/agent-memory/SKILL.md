@@ -36,3 +36,7 @@ conflicting targets and pending edits. Document copy/delete partial completion.
 Use Node >=24, ESM exports, workspace deps, Biome and Vitest. Keep regressions for
 scope/privacy, provenance, signed approvals, real SHACL, race/retry behavior and
 local CSS. Never call live providers or pods or use real credentials in tests.
+
+`MemoryMandate` and `DEFAULT_MEMORY_SCOPE` are re-exported from `@jeswr/pkg-memory`;
+category normalization also uses its shared `memoryCategory`. Recall behavior and
+the default preference-only scope remain the same.

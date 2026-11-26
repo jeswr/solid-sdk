@@ -74,3 +74,12 @@ mixed graphs without rewriting the terms or their content-derived identifiers.
 For category inventories, import the frozen `SPECIAL_CATEGORIES` list instead of copying it.
 Browser code must use `@jeswr/pkg-memory/categories`; the root entry includes Node modules.
 The policy's private membership set is built from the same list and cannot be mutated by callers.
+
+`MemoryMandate`, `DEFAULT_MEMORY_SCOPE`, `memoryCategory` and `scopeAdmits` are
+shared recall primitives. The default is a frozen array containing only the full
+DPV-PD Preference IRI. `memoryCategory` expands `pd:` names and rejects other
+namespaces or invalid local names with TypeError. `scopeAdmits(scope, categories)`
+requires a nonempty category list and exact membership for every category after
+CURIE expansion. Undefined scope selects the default; an empty scope grants
+nothing. No wildcard or subclass inference occurs. These helpers do not verify
+a mandate or evaluate purpose policy; the host must do both before recall.

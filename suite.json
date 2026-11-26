@@ -51,9 +51,11 @@
     "@jeswr/solid-elements",
     "@jeswr/solid-federation-vocab",
     "@jeswr/solid-granary",
+    "@jeswr/solid-health",
     "@jeswr/solid-health-diary",
     "@jeswr/solid-mcp",
     "@jeswr/solid-memory",
+    "@jeswr/solid-money",
     "@jeswr/solid-odrl",
     "solid-offline",
     "@jeswr/solid-openid-client",
@@ -103,7 +105,9 @@
     "@jeswr/solid-scheduling",
     "@jeswr/solid-sheets",
     "@jeswr/solid-environment",
-    "@jeswr/agent-consent"
+    "@jeswr/agent-consent",
+    "@jeswr/pod-export",
+    "@jeswr/pod-legacy"
   ],
   "applications": [
     {

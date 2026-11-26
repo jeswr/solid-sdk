@@ -38,12 +38,15 @@
     "@jeswr/pod-access": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/pod-connectors": "workspace:*",
+    "@jeswr/pod-export": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*",
     "@jeswr/rdf-engine": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-chat-interop": "workspace:*",
     "@jeswr/solid-dav-bridge": "workspace:*",
     "@jeswr/solid-offline": "workspace:*",
     "@jeswr/solid-sheets": "workspace:*",
+    "@jeswr/solid-money": "workspace:*",
     "@jeswr/solid-task-model": "workspace:*",
     "@jeswr/solid-vc": "workspace:*",
     "@jeswr/storage-capabilities": "workspace:*",
@@ -102,7 +105,8 @@
     "saxes": "6.0.0",
     "y-indexeddb": "9.0.12",
     "yjs": "13.6.27",
-    "zod": "4.4.3"
+    "zod": "4.4.3",
+    "@jeswr/pod-legacy": "workspace:*"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.1",

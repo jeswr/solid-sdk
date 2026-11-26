@@ -1,8 +1,5 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
-export * from "./helpers";
+// AUTHORED-BY Codex (GPT-6.1 Sol)
+// Compatibility entry for the frozen app oracle; model ownership is in the SDK.
+export * from "@jeswr/solid-money";
 export * from "./import";
 export * from "./io";
-export * from "./rdf";
-export * from "./transfer";
-export * from "./types";
-export * from "./validation";

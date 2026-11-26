@@ -1,0 +1,66 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Strict WRITE profile for device/app measurement imports, derived from
+# sectors/health/health.shacl.ttl (ObservationShape and HeartRateObservationShape).
+# Narrowings / omissions relative to the open sector profile:
+# - Only Observation, HeartRateObservation, StepCountObservation, SleepObservation,
+#   CodeableConcept, core:Person and time:Instant are projected. Records, clinical
+#   acts, care teams, conditions, medication and immunization shapes are omitted.
+# - Code, patient and effectiveTime MUSTs are preserved; links become single IRIs
+#   with exactly one value and explicit child shapes. Patient is core:Person,
+#   never inferred to be the pod owner; the facade requires document-local #subject.
+# - health:value is exactly one xsd:decimal (sector leaves datatype open).
+# - effectiveTime narrows TemporalEntity (instant OR interval) to Instant, while
+#   retaining sh:class TemporalEntity. Daily steps/sleep use a summary instant;
+#   interval/stage details remain source notes, not asserted interval semantics.
+# - time:inXSDDateTimeStamp uses xsd:dateTime, matching existing Health/Garmin
+#   writes. Generator gap: xsd:dateTimeStamp has no runtime mapping. The facade
+#   additionally requires an explicit lexical timezone (Z or +/-hh:mm).
+#   The ontology's original xsd:dateTimeStamp range is retained, not rewritten.
+# - Optional QUDT units are restricted to M, SEC and BEAT-PER-MIN from the
+#   sector's imported slims, plus NUM used by the existing Health/Garmin importers.
+#   External qudt:Unit class hints are represented by this fixed IRI inventory (no per-document unit descriptions). UCUM is required, including
+#   for metrics whose QUDT unit is not in this inventory. No invented unit IRIs.
+# - Heart rate's advisory hasValue becomes a required singleton sh:in constraint.
+#   Steps/sleep likewise require NUM/SEC. The facade supplies these unit defaults;
+#   generated subtype parsing enforces them alongside the Observation composite.
+# - The sector's `sh:node hsh:ObservationShape` on the subtype shapes is omitted
+#   here (generator gap: admission has no runtime projection for sh:node). The
+#   exported ./health.shacl.ttl restores it from codegen/health.composition.ttl.
+# - Codes require nonblank core:value; display label and real scheme are optional.
+#   core:inScheme is restricted to LOINC (http://loinc.org), never source field keys.
+# - Optional schema:name, schema:description and dct:source retain import metadata.
+# This is a write subset, not a replacement for the sector's normative profile.
+@prefix health: <https://jeswr.org/ns/sectors/health#> .
+@prefix core: <https://jeswr.org/ns/core#> .
+@prefix time: <http://www.w3.org/2006/time#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix unit: <http://qudt.org/vocab/unit/> .
+@prefix hsh: <https://jeswr.org/ns/sectors/health/import-shapes#> .
+@prefix schema: <https://schema.org/> .
+
+hsh:ObservationShape a sh:NodeShape ; sh:targetClass health:Observation ;
+ sh:property [ sh:path health:hasCode ; sh:name "code" ; sh:nodeKind sh:IRI ; sh:class health:CodeableConcept ; sh:node hsh:CodeShape ; sh:minCount 1 ; sh:maxCount 1 ] ;
+ sh:property [ sh:path health:patient ; sh:name "patient" ; sh:nodeKind sh:IRI ; sh:class core:Person ; sh:node hsh:PatientShape ; sh:minCount 1 ; sh:maxCount 1 ] ;
+ sh:property [ sh:path health:effectiveTime ; sh:name "time" ; sh:nodeKind sh:IRI ; sh:class time:TemporalEntity ; sh:node hsh:InstantShape ; sh:minCount 1 ; sh:maxCount 1 ] ;
+ sh:property [ sh:path health:value ; sh:name "measuredValue" ; sh:datatype xsd:decimal ; sh:minCount 1 ; sh:maxCount 1 ] ;
+ sh:property [ sh:path health:hasUnit ; sh:name "unit" ; sh:nodeKind sh:IRI ; sh:in (unit:NUM unit:M unit:SEC unit:BEAT-PER-MIN) ; sh:maxCount 1 ] ;
+ sh:property [ sh:path health:unitCode ; sh:name "unitCode" ; sh:datatype xsd:string ; sh:minLength 1 ; sh:pattern "\\S" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path dct:source ; sh:name "source" ; sh:datatype xsd:string ; sh:maxCount 1 ] .
+hsh:CodeShape a sh:NodeShape ; sh:targetClass health:CodeableConcept ;
+ sh:property [ sh:path core:value ; sh:name "codeValue" ; sh:datatype xsd:string ; sh:minLength 1 ; sh:pattern "\\S" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+ sh:property [ sh:path rdfs:label ; sh:name "display" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path core:inScheme ; sh:name "scheme" ; sh:nodeKind sh:IRI ; sh:in (<http://loinc.org>) ; sh:maxCount 1 ] .
+hsh:InstantShape a sh:NodeShape ; sh:targetClass time:Instant ;
+ sh:property [ sh:path time:inXSDDateTimeStamp ; sh:name "dateTime" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] .
+hsh:PatientShape a sh:NodeShape ; sh:targetClass core:Person .
+hsh:HeartRateShape a sh:NodeShape ; sh:targetClass health:HeartRateObservation ;
+ sh:property [ sh:path health:hasUnit ; sh:name "unit" ; sh:nodeKind sh:IRI ; sh:in (unit:BEAT-PER-MIN) ; sh:minCount 1 ; sh:maxCount 1 ] .
+hsh:StepsShape a sh:NodeShape ; sh:targetClass health:StepCountObservation ;
+ sh:property [ sh:path health:hasUnit ; sh:name "unit" ; sh:nodeKind sh:IRI ; sh:in (unit:NUM) ; sh:minCount 1 ; sh:maxCount 1 ] .
+hsh:SleepShape a sh:NodeShape ; sh:targetClass health:SleepObservation ;
+ sh:property [ sh:path health:hasUnit ; sh:name "unit" ; sh:nodeKind sh:IRI ; sh:in (unit:SEC) ; sh:minCount 1 ; sh:maxCount 1 ] .

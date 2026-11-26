@@ -6,7 +6,7 @@
  * Garmin is Tier B for OAuth (partner-program gated — see `adapter.ts`), but
  * users can already export their own data, so this file adapter complements
  * the OAuth path under the same catalog id — the connect page shows both. Two
- * practical export shapes are supported:
+ * legacy activity export shapes remain supported alongside the full account ZIP:
  *
  * 1. **Activities.csv** — Garmin Connect → Activities
  *    (connect.garmin.com/modern/activities) → "Export CSV". One summary row
@@ -19,10 +19,8 @@
  *    the track, so we derive distance (haversine over trackpoints) and
  *    duration (first→last point time) and never invent calories.
  *
- * Garmin's full account archive (garmin.com/account/datamanagement → "Export
- * Your Data") contains `summarizedActivities.json` deep inside a large ZIP
- * (`DI_CONNECT/DI-Connect-Fitness…`); we point users at the two lighter
- * exports above instead of shipping a ZIP reader (the Apple Health rationale).
+ * The recommended full account ZIP is detected by its entries and imported by
+ * archive.ts, reusing Takeout's streaming ZIP validation and the bounded JSON reader.
  *
  * Normalisation follows the catalog's vocabulary map (Strava precedent):
  * runs/workouts → `schema:ExerciseAction` (Health); rides/commutes →
@@ -34,12 +32,23 @@
 import { DataFactory, Store } from "n3";
 import { parseCsv } from "../core/csv.js";
 import { isoDurationFromSeconds } from "../core/duration.js";
-import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
-import { fileText } from "../core/file-stream.js";
+import type {
+  FileImportAdapter,
+  FileImportContext,
+  FileImportOutcome,
+  ImportFile,
+} from "../core/file-import.js";
 import { extractBlocks, firstTagText } from "../core/mini-xml.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { type ActionThing, CLASSES, ExerciseAction, TravelAction } from "../core/vocab.js";
+import { isTravelActivity } from "./activity-kind.js";
+import {
+  GARMIN_ARCHIVE_LIMITS,
+  type GarminArchiveLimits,
+  garminInput,
+  importGarminArchive,
+} from "./archive.js";
 import { vocabMap } from "./vocab-map.js";
 
 const ID = "garmin";
@@ -51,55 +60,75 @@ const metadata: IntegrationMetadata = {
   authKind: "export-file",
   scopes: [],
   categories: ["health", "mobility"],
-  whatYouGet: "Your Garmin activities — workouts into Health, rides and commutes into Mobility.",
+  whatYouGet:
+    "Your full Garmin export: activities, daily health summaries, sleep, overnight HRV and VO₂max. Workouts go into Health; rides and commutes into Mobility. Unsupported files and metrics are reported.",
   requirements: [],
 };
 
-export const garminFileAdapter: FileImportAdapter = {
-  vocabMap,
-  metadata,
-  accept: ".csv,.gpx,.tcx,text/csv,application/gpx+xml,application/vnd.garmin.tcx+xml",
-  fileHint:
-    "Garmin Connect → Activities → \"Export CSV\" gives Activities.csv with one row per activity (scroll to the bottom of the list first — Garmin only exports the rows it has loaded). For a single workout, open the activity and export it as GPX or TCX instead. Garmin's full account archive (Account → Data Management → Export Your Data) also contains your activities, but it's a large ZIP — the CSV is the practical route.",
-  exportUrl: "https://connect.garmin.com/modern/activities",
+/** Hosts may lower archive limits; defaults are hard ceilings for untrusted inputs. */
+export function createGarminFileAdapter(
+  options: Partial<GarminArchiveLimits> = {},
+): FileImportAdapter {
+  const limits = { ...GARMIN_ARCHIVE_LIMITS, ...options };
+  for (const key of Object.keys(GARMIN_ARCHIVE_LIMITS) as (keyof GarminArchiveLimits)[]) {
+    if (
+      !Number.isSafeInteger(limits[key]) ||
+      limits[key] < 1 ||
+      limits[key] > GARMIN_ARCHIVE_LIMITS[key]
+    )
+      throw new RangeError(`Invalid Garmin archive limit: ${key}`);
+  }
+  return {
+    vocabMap,
+    metadata,
+    streaming: true,
+    accept:
+      ".zip,application/zip,.csv,.gpx,.tcx,text/csv,application/gpx+xml,application/vnd.garmin.tcx+xml",
+    fileHint:
+      'Recommended: Garmin Account → Data Management → "Export Your Data" and select the full downloaded ZIP; no need to unzip. Garmin Connect → Activities → "Export CSV" (load all rows first), or a single activity exported as GPX or TCX, also work. Nested FIT archives are handled by the activity-files adapter.',
+    exportUrl: "https://www.garmin.com/account/datamanagement/",
 
-  async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
-    ctx.progress({ label: "Reading your Garmin export…", done: 0, total: 2 });
-    let text = "";
-    for await (const chunk of fileText(file)) text += chunk;
+    async importFile(file: ImportFile, ctx: FileImportContext): Promise<void | FileImportOutcome> {
+      ctx.progress({ label: "Reading your Garmin export…", done: 0, total: 2 });
+      const input = await garminInput(file, ctx.signal);
+      if (input.zip) return importGarminArchive(file, ctx, limits);
+      const text = input.text;
 
-    const exercises = new Store();
-    const journeys = new Store();
-    const exDoc = ctx.resolve(EXERCISE_SLUG);
-    const travelDoc = ctx.resolve(TRAVEL_SLUG);
-    const sink: ActivitySink = { exercises, journeys, exDoc, travelDoc };
+      const exercises = new Store();
+      const journeys = new Store();
+      const exDoc = ctx.resolve(EXERCISE_SLUG);
+      const travelDoc = ctx.resolve(TRAVEL_SLUG);
+      const sink: ActivitySink = { exercises, journeys, exDoc, travelDoc };
 
-    const kind = detectShape(file.name, text);
-    if (kind === "csv") parseActivitiesCsv(text, ctx.maxRows, sink);
-    else if (kind === "gpx") parseGpx(text, ctx.maxRows, sink);
-    else if (kind === "tcx") parseTcx(text, ctx.maxRows, sink);
-    // Unknown shape writes nothing; the runner reports "nothing importable".
+      const kind = detectShape(file.name, text);
+      if (kind === "csv") parseActivitiesCsv(text, ctx.maxRows, sink);
+      else if (kind === "gpx") parseGpx(text, ctx.maxRows, sink);
+      else if (kind === "tcx") parseTcx(text, ctx.maxRows, sink);
+      // Unknown shape writes nothing; the runner reports "nothing importable".
 
-    ctx.progress({ label: "Saving to your pod…", done: 1, total: 2 });
-    if (exercises.size > 0) {
-      await ctx.write({
-        slug: EXERCISE_SLUG,
-        category: "health",
-        forClass: CLASSES.ExerciseAction,
-        dataset: exercises,
-      });
-    }
-    if (journeys.size > 0) {
-      await ctx.write({
-        slug: TRAVEL_SLUG,
-        category: "mobility",
-        forClass: CLASSES.TravelAction,
-        dataset: journeys,
-      });
-    }
-    ctx.progress({ label: "Done", done: 2, total: 2 });
-  },
-};
+      ctx.progress({ label: "Saving to your pod…", done: 1, total: 2 });
+      if (exercises.size > 0) {
+        await ctx.write({
+          slug: EXERCISE_SLUG,
+          category: "health",
+          forClass: CLASSES.ExerciseAction,
+          dataset: exercises,
+        });
+      }
+      if (journeys.size > 0) {
+        await ctx.write({
+          slug: TRAVEL_SLUG,
+          category: "mobility",
+          forClass: CLASSES.TravelAction,
+          dataset: journeys,
+        });
+      }
+      ctx.progress({ label: "Done", done: 2, total: 2 });
+    },
+  };
+}
+
+export const garminFileAdapter = createGarminFileAdapter();
 
 /** Same doc slugs as the OAuth adapter: one Garmin container, either path. */
 const EXERCISE_SLUG = "health/activities.ttl";
@@ -138,16 +167,7 @@ export function detectShape(name: string, text: string): "csv" | "gpx" | "tcx" |
   return "unknown";
 }
 
-/**
- * Rides/commutes → Mobility (`schema:TravelAction`), per the catalog's
- * vocabulary map (Strava precedent). Stationary "rides" (indoor/virtual
- * cycling) stay in Health — no journey happened.
- */
-export function isTravelActivity(type: string): boolean {
-  const t = type.toLowerCase();
-  if (/indoor|virtual|spin/.test(t)) return false;
-  return /cycling|biking|\bride\b|commut|driving|motorcycl|transition/.test(t);
-}
+export { isTravelActivity } from "./activity-kind.js";
 
 /** Write one activity into the right store as the right typed class. */
 function addActivity(a: Activity, sink: ActivitySink): void {

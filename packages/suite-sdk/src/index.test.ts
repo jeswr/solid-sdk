@@ -49,6 +49,7 @@ function fakeAuth(current: Identity | null = alice) {
     restore: async () => current,
     identity: async () => current,
     remembered: async () => [],
+    retireIfOwnedBy: async () => ({ retired: false, reason: "no-grant" }),
     login: async () => alice,
     logout: async () => {},
     on: (type, handler) => {

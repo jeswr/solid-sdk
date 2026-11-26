@@ -29,6 +29,7 @@ describe("Tasks preferences", () => {
     ).toEqual({
       sharedProjects: [],
       favourites: [],
+      boardGrouping: {},
       sort: { inbox: "name" },
       groupBy: {},
       viewMode: { home: "board" },

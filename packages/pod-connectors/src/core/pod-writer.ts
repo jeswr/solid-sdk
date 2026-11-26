@@ -1,14 +1,21 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { freshRdf } from "../pod/rdf-read.js";
-import { ResourceWriteError, writeResource } from "../pod/resource.js";
+import { isCompletedPut, ResourceWriteError, writeResource } from "../pod/resource.js";
 import { ensureTypeRegistrations } from "../pod/type-index-write.js";
 import { abortableFetch } from "./abort.js";
 import { IntegrationSyncError } from "./errors.js";
-import { adapterContainer, containerResolver, validateBinaryType } from "./pod-writer-policy.js";
-import type { BinaryDoc, PodWriter, WrittenBinary } from "./types.js";
+import {
+  adapterContainer,
+  cleanupPrivateResource,
+  containerResolver,
+  requiresPrivateDestination,
+  validateBinaryType,
+} from "./pod-writer-policy.js";
+import type { BinaryDoc, MutationGuard, PodWriter, WrittenBinary } from "./types.js";
 import { VOCAB_PREFIXES } from "./vocab.js";
 
 /** Configuration for a fetch-backed writer bound to one connector and active Pod. */
@@ -18,12 +25,13 @@ export interface FetchPodWriterOptions {
   /** Canonical profile document URL resolved by the host when loading the WebID. */
   readonly profileDocumentUrl: string;
   readonly podRoot: string;
-  /** Host's authenticated Pod transport; resolved at call time by the host. */
+  /** Host's authenticated Pod transport. Pass the run signal separately so cleanup can outlive it. */
   readonly fetch: typeof fetch;
+  readonly verifyPrivateDestination?: PodWriter["verifyPrivateDestination"];
+  readonly confirmPrivateWrite?: PodWriter["confirmPrivateWrite"];
   /**
-   * The run's cancellation signal. Every Pod request this writer sends (reads, PUT/DELETE,
-   * the binary HEAD and Type Index/profile updates) checks it immediately before sending and
-   * carries it, composed with the request's own signal.
+   * The run's cancellation signal. Reads, writes and Type Index operations check it immediately
+   * before sending. Private PUT and DELETE requests can finish after cancellation.
    */
   readonly signal?: AbortSignal;
 }
@@ -36,12 +44,19 @@ export interface FetchPodWriterOptions {
 export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter {
   const { adapterId, webId, podRoot } = options;
   const root = adapterContainer(adapterId, podRoot);
-  const transport = options.signal ? abortableFetch(options.fetch, options.signal) : options.fetch;
+  const transport = options.signal
+    ? abortableFetch(options.fetch, options.signal, requiresPrivateDestination(adapterId))
+    : options.fetch;
   const podFetch = createPodScopedFetch(root, { fetch: transport, allowRoot: false });
+  const cleanupFetch = createPodScopedFetch(root, { fetch: options.fetch, allowRoot: false });
   const resolve = containerResolver(root, adapterId);
   return {
     webId,
     resolve,
+    verifyPrivateDestination: options.verifyPrivateDestination,
+    confirmPrivateWrite: options.confirmPrivateWrite,
+    cleanupPrivateWrite: (slug, cleanup) =>
+      cleanupPrivateResource(cleanupFetch, resolve(slug), cleanup),
     async read(slug) {
       const url = resolve(slug);
       try {
@@ -52,37 +67,54 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
         throw error;
       }
     },
-    async write(doc, conditions = {}) {
+    async write(doc, conditions = {}, guard) {
       const url = resolve(doc.slug);
-      await writeResource(url, doc.dataset, {
+      const createOnly = conditions.ifNoneMatch === "*";
+      const { etag, status } = await writeResource(url, doc.dataset, {
         fetchImpl: podFetch,
         etag: conditions.ifMatch,
-        createOnly: conditions.ifNoneMatch === "*",
+        createOnly,
         prefixes: { ...VOCAB_PREFIXES },
+        guard,
       });
       return {
         url,
+        ...(options.verifyPrivateDestination && {
+          writeCreated: createOnly && isCompletedPut(status),
+          ...(etag !== null && { writeEtag: etag }),
+        }),
         category: doc.category,
         forClass: doc.forClass,
         skipRegistration: doc.skipRegistration,
       };
     },
-    writeBinary: async (doc) => writeBinaryResource(adapterId, resolve(doc.slug), doc, podFetch),
-    async remove(slug, conditions = {}) {
+    writeBinary: async (doc, guard) =>
+      writeBinaryResource(
+        adapterId,
+        resolve(doc.slug),
+        doc,
+        podFetch,
+        !!options.verifyPrivateDestination,
+        guard,
+      ),
+    async remove(slug, conditions = {}, guard) {
       const url = resolve(slug);
       const headers = new Headers();
       if (conditions.ifMatch) headers.set("if-match", conditions.ifMatch);
+      const refused = guard?.();
+      if (refused) return refused;
       const response = await podFetch(url, { method: "DELETE", redirect: "error", headers });
       if (!response.ok && response.status !== 404)
         throw new ResourceWriteError(url, response.status);
     },
-    registerType: (registrations) =>
+    registerType: (registrations, guard) =>
       ensureTypeRegistrations({
         webId,
         profileDocumentUrl: options.profileDocumentUrl,
         podRoot,
         registrations: [...registrations],
         fetchImpl: transport,
+        guard,
       }),
   };
 }
@@ -92,6 +124,8 @@ async function writeBinaryResource(
   url: string,
   doc: BinaryDoc,
   podFetch: typeof fetch,
+  keepWriteEtag: boolean,
+  guard?: MutationGuard,
 ): Promise<WrittenBinary> {
   validateBinaryType(doc.contentType, adapterId);
   const headers = new Headers({ "content-type": doc.contentType });
@@ -108,6 +142,8 @@ async function writeBinaryResource(
       headers.set("if-match", etag);
     }
   }
+  const refused = guard?.();
+  if (refused) return refused;
   const response = await podFetch(url, {
     method: "PUT",
     redirect: "error",
@@ -117,7 +153,15 @@ async function writeBinaryResource(
   if (response.status === 412 && (doc.mode ?? "create") === "create")
     return { url, created: false };
   if (!response.ok) throw new ResourceWriteError(url, response.status);
-  return { url, created: true };
+  const etag = response.headers.get("etag");
+  return {
+    url,
+    created: true,
+    ...(keepWriteEtag && {
+      writeCreated: headers.has("if-none-match") && isCompletedPut(response.status),
+      ...(etag !== null && { writeEtag: etag }),
+    }),
+  };
 }
 
 /** Distinct class/container registrations for written documents. */
@@ -126,7 +170,8 @@ export function registrationsFor(written: readonly import("./types.js").WrittenD
   for (const doc of written) {
     if (doc.skipRegistration) continue;
     const container = doc.registrationContainer ?? doc.url.slice(0, doc.url.lastIndexOf("/") + 1);
-    out.set(`${doc.forClass}|${container}`, { forClass: doc.forClass, container });
+    for (const forClass of [doc.forClass, ...(doc.additionalClasses ?? [])])
+      out.set(`${forClass}|${container}`, { forClass, container });
   }
   return [...out.values()];
 }

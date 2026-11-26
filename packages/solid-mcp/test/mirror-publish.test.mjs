@@ -7,7 +7,7 @@ const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.
 const dist = new URL("../dist/", import.meta.url);
 
 describe("MCP mirror artifacts", () => {
-  it("publishes without private OAuth or memory mirror SHAs", () => {
+  it("publishes bundled private dependencies without mirror SHAs", () => {
     const sha = "a".repeat(40);
     const external = [
       "@jeswr/guarded-fetch",
@@ -21,12 +21,13 @@ describe("MCP mirror artifacts", () => {
     expect(mirror.dependencies).not.toHaveProperty("@jeswr/mcp-oauth");
     expect(mirror.dependencies).not.toHaveProperty("@jeswr/pkg-memory");
     expect(mirror.dependencies).not.toHaveProperty("@jeswr/storage-client");
+    expect(mirror.dependencies).not.toHaveProperty("@jeswr/storage-capabilities");
     for (const name of external) {
       expect(mirror.dependencies[name]).toBe(`github:jeswr/${name.slice("@jeswr/".length)}#${sha}`);
     }
   });
 
-  it("emits JavaScript and declarations without private OAuth or memory imports", () => {
+  it("emits JavaScript and declarations without bundled workspace imports", () => {
     const files = readdirSync(dist, { recursive: true });
     for (const extension of [".js", ".d.ts"]) {
       const artifacts = files.filter((name) => name.endsWith(extension));
@@ -36,6 +37,9 @@ describe("MCP mirror artifacts", () => {
         expect(readFileSync(new URL(name, dist), "utf8"), name).not.toContain("@jeswr/pkg-memory");
         expect(readFileSync(new URL(name, dist), "utf8"), name).not.toContain(
           "@jeswr/storage-client",
+        );
+        expect(readFileSync(new URL(name, dist), "utf8"), name).not.toContain(
+          "@jeswr/storage-capabilities",
         );
       }
     }

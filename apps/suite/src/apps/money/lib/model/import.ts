@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import type { Transaction } from "@jeswr/solid-money";
+import { identifier, iri, validateMoney, validateTransaction } from "@jeswr/solid-money";
 import { type CsvOptions, type ImportedTransaction, importCsv, importOfx } from "../import";
 import type { MoneyStore } from "./io";
-import type { Transaction } from "./types";
-import { identifier, iri, validateMoney, validateTransaction } from "./validation";
 
 export type Statement =
   | { readonly format: "csv"; readonly text: string; readonly options: CsvOptions }

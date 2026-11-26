@@ -39,7 +39,7 @@ export function personalAclOptions(pod: PodPort) {
 }
 
 /** Check every decoding stage: backends may decode different numbers of times. */
-function pathAliases(url: URL): string[] {
+export function pathAliases(url: URL): string[] {
   let path = url.pathname;
   const aliases: string[] = [];
   for (let depth = 0; ; depth++) {
@@ -117,9 +117,19 @@ export async function governingAuxiliaries(pod: PodPort): Promise<ReadonlySet<st
     const responses = await Promise.all([...targets].map((target) => head.call(pod, target)));
     for (const metadata of responses) {
       // A successful HEAD alone cannot establish the governing auxiliary resources.
-      if (!metadata.acl && !metadata.describedby?.length) throw new Error();
-      for (const association of [metadata.acl, ...(metadata.describedby ?? [])]) {
-        if (association === undefined) continue;
+      if (!metadata.acl && !metadata.describedby?.length && !metadata.acr?.length)
+        throw new Error();
+      const associations = [
+        ...(metadata.acl === undefined ? [] : [metadata.acl]),
+        ...(metadata.describedby ?? []),
+        ...(metadata.acr ?? []),
+      ];
+      // ACP suppresses the WAC-only field. Protect any accompanying associations too.
+      if (metadata.acr?.length) {
+        if (!metadata.auxiliaryResources?.length) throw new Error();
+        associations.push(...metadata.auxiliaryResources);
+      }
+      for (const association of new Set(associations)) {
         const url = new URL(association); // Portable ports promise absolute metadata.
         requirePodScopedUrl({ podRoot: root.href }, url.href);
         for (const path of pathAliases(url)) {

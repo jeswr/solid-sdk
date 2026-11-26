@@ -6,6 +6,7 @@ const badges = {
   demo: "Demo data",
   import: "Import a file",
   soon: "Coming soon",
+  "cli-only": "CLI only",
 };
 export function StatusBadge({ status }: Pick<ConnectorEntry, "status">) {
   return (

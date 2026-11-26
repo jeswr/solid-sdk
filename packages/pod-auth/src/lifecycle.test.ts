@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import type { RefreshSessionRecord } from "@jeswr/reactive-authentication";
 import { afterEach, expect, test, vi } from "vitest";
@@ -980,9 +981,30 @@ test.each([
   const auth = f.load();
   expect(await auth.restore()).toBeNull();
   expect(await auth.identity()).toBeNull();
-  // The catalog survives a provider-level failure long enough for a subsequent logout to purge it.
+  expect(f.record()).toBeUndefined();
+  for (const name of ["owner", "accounts", "active"])
+    expect([...f.values.keys()].some((key) => JSON.parse(key)[1] === name)).toBe(false);
   await auth.logout();
   expect(f.record()).toBeUndefined();
+});
+
+test("rejecting a selected identity discards its grant, owner and catalog entry without a full forget", async () => {
+  const f = fixture();
+  f.options.ui.getWebId = async () => "https://id.example/bob";
+  // Only the rejected attempt's own grant is discarded; nothing is revoked or superseded.
+  const { DPoPTokenProvider } = await import("@jeswr/reactive-authentication");
+  const forget = vi.spyOn(DPoPTokenProvider.prototype, "forget");
+  await f.sessions.setItem("unrelated", { keep: true });
+  const auth = f.load();
+  await expect(auth.login()).rejects.toThrow("selected account");
+  expect(forget).not.toHaveBeenCalled();
+  expect(await auth.identity()).toBeNull();
+  expect(f.record()).toBeUndefined();
+  for (const name of ["owner", "accounts", "active"])
+    expect(
+      [...f.values.keys()].some((key) => key !== "unrelated" && JSON.parse(key)[1] === name),
+    ).toBe(false);
+  expect(await f.sessions.getItem("unrelated")).toEqual({ keep: true });
 });
 
 test.each([

@@ -4,10 +4,10 @@ import {
   type Balance,
   instant,
   MoneyDocument,
-  MoneyIoError,
   putAccount,
   putBalance,
-} from "../model";
+} from "@jeswr/solid-money";
+import { MoneyIoError } from "../model";
 import { parseMoney } from "../reports";
 import { type MoneyClient, provision, storeOf } from "./container";
 import { allTransactions } from "./ledger";

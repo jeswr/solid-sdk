@@ -6,7 +6,7 @@
   "description": "Storage description discovery and feature flags. Experimental, AI-agent-generated scaffold.",
   "type": "module",
   "sideEffects": false,
-  "securityCritical": false,
+  "securityCritical": true,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

@@ -1,9 +1,19 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createRequire } from "node:module";
 import { createInboxReader, type InboxNotification } from "@jeswr/pod-access/notify";
+import { buildDigest } from "@jeswr/suite-sdk/digest";
 import { act, useEffect, useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { SuiteNotification } from "../src/shell/lib/notifications-model";
+import {
+  defaultPreferences,
+  mergePreferences,
+  preferencesKey,
+} from "../src/shell/lib/settings-preferences";
+import { seedDigestNotifications } from "../src/shell/notifications/demo-digest";
+import { demoNotifications } from "../src/shell/notifications/demo-source";
+import { showDesktopNotification } from "../src/shell/notifications/desktop";
+import { readDigest, saveDigest } from "../src/shell/notifications/digest-store";
 import { addLocalNotification } from "../src/shell/notifications/local-store";
 import { createPodNotificationSource } from "../src/shell/notifications/pod-source";
 import { NotificationsProvider, useNotifications } from "../src/shell/notifications/provider";
@@ -19,6 +29,10 @@ const { cleanup, fireEvent, render, screen, waitFor } = requireUi(
 ) as typeof import("../../../packages/suite-ui/node_modules/@testing-library/react");
 const accounts = vi.hoisted(() => ({ current: {} as AccountsContextValue }));
 vi.mock("../src/shell/session/accounts-provider", () => ({ useAccounts: () => accounts.current }));
+vi.mock("../src/shell/notifications/desktop", async (original) => ({
+  ...(await original<typeof import("../src/shell/notifications/desktop")>()),
+  showDesktopNotification: vi.fn(async () => {}),
+}));
 vi.mock("@jeswr/pod-access/notify", async (original) => ({
   ...(await original<typeof import("@jeswr/pod-access/notify")>()),
   createInboxReader: vi.fn(),
@@ -27,6 +41,11 @@ vi.mock("../src/shell/notifications/pod-source", async (original) => {
   const actual = await original<typeof import("../src/shell/notifications/pod-source")>();
   return { ...actual, createPodNotificationSource: vi.fn(actual.createPodNotificationSource) };
 });
+
+// Agent reader behavior is covered independently; these tests isolate the inbox/session seam.
+vi.mock("../src/shell/notifications/agent-source", () => ({
+  createAgentNotificationSource: () => ({ id: "agent-fixture", list: async () => [] }),
+}));
 
 const alice: SuiteAccount = {
   id: "pod-notifications-alice",
@@ -48,6 +67,8 @@ const notification = (owner: string): InboxNotification => ({
 });
 const readers: { list: ReturnType<typeof vi.fn<ReturnType<typeof createInboxReader>["list"]>> }[] =
   [];
+const demoItems = [...demoNotifications(), ...seedDigestNotifications(new Date())];
+const demoUnread = demoItems.filter((item) => !item.read).length;
 let actions: ReturnType<typeof useNotifications>;
 let mounts: number;
 const renders: string[][] = [];
@@ -110,7 +131,54 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
+});
+
+it("does not advance a digest while expired or before its fresh pod listing, then includes older arrivals", async () => {
+  const account = { ...alice, id: "pod-notifications-digest" };
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const first = new Date("2026-11-11T12:15Z");
+  vi.setSystemTime(first);
+  const original = saveDigest(account.id, buildDigest([], { since: 0, now: first.getTime() }));
+  localStorage.setItem(
+    preferencesKey(account.id),
+    JSON.stringify(
+      mergePreferences(defaultPreferences, { summary: { mode: "hourly" }, desktop: true }),
+    ),
+  );
+  await addLocalNotification(account.id, {
+    id: "local-before-pod",
+    kind: "task",
+    title: "Local item",
+    createdAt: first,
+    read: false,
+  });
+  accounts.current = { ...accounts.current, active: account, status: "expired" };
+  const view = render(tree());
+  await act(async () => {});
+  vi.setSystemTime(new Date("2026-11-11T13:00Z"));
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  expect(readDigest(account.id)).toEqual(original);
+  expect(createPodNotificationSource).not.toHaveBeenCalled();
+  expect(showDesktopNotification).not.toHaveBeenCalled();
+  const pending = deferred<InboxNotification[]>();
+  vi.mocked(createInboxReader).mockReturnValue({
+    inbox: async (id) => id,
+    list: vi.fn(() => pending.promise),
+  });
+  accounts.current = { ...accounts.current, status: "ready" };
+  view.rerender(tree());
+  await act(async () => {});
+  expect(createPodNotificationSource).toHaveBeenCalledOnce();
+  expect(readDigest(account.id)).toEqual(original);
+  await act(async () =>
+    pending.resolve([{ ...notification(alice.webId), published: "2026-11-11T12:00:00Z" }]),
+  );
+  expect(readDigest(account.id)?.digestedIds).toContain(notification(alice.webId).url);
+  expect(readDigest(account.id)?.count).toBe(2);
+  expect(readDigest(account.id)?.now).toBe(new Date("2026-11-11T13:00Z").getTime());
+  expect(showDesktopNotification).toHaveBeenCalledOnce();
 });
 
 it("adds a ready real account's inbox using its fenced authenticated fetch and keeps read state local", async () => {
@@ -152,7 +220,7 @@ it("disposes on switch/sign-out, drops items synchronously, and ignores late sou
   const fetch = fencedFetch(0);
   const late = deferred<InboxNotification[]>();
   readers[0]?.list.mockReturnValueOnce(late.promise);
-  let refresh!: Promise<void>;
+  let refresh!: Promise<boolean>;
   await act(async () => {
     refresh = actions.refresh();
   });
@@ -256,14 +324,14 @@ it("doesn't create a pod source without a WebID", async () => {
   expect(createPodNotificationSource).not.toHaveBeenCalled();
 });
 
-it("keeps demo's six synthetic items and four unread without reading a pod", async () => {
+it("keeps demo notifications and agent digest examples without reading a pod", async () => {
   accounts.current = {
     ...accounts.current,
     active: { ...alice, id: "pod-notifications-demo", kind: "demo" },
   };
   render(tree());
-  await waitFor(() => expect(actions.items).toHaveLength(6));
-  expect(actions.unread).toBe(4);
+  await waitFor(() => expect(actions.items).toHaveLength(demoItems.length));
+  expect(actions.unread).toBe(demoUnread);
   expect(actions.items.find((item) => item.id === "demo-request")?.request).toBeDefined();
   expect(createPodNotificationSource).not.toHaveBeenCalled();
   expect(accounts.current.fetch).not.toHaveBeenCalled();
@@ -275,7 +343,7 @@ it.each([
 ] as const)("persists individual and all read flags when a %s notification session is recreated", async (kind) => {
   accounts.current = { ...accounts.current, active: { ...alice, kind } };
   let view = render(tree());
-  await waitFor(() => expect(actions.unread).toBe(kind === "demo" ? 4 : 1));
+  await waitFor(() => expect(actions.unread).toBe(kind === "demo" ? demoUnread : 1));
   const item = actions.items[0];
   if (!item) throw new Error("Expected a notification");
   const id = item.id;
@@ -288,14 +356,14 @@ it.each([
   view = render(tree());
   await waitFor(() => expect(actions.items.some((item) => item.id === id)).toBe(true));
   expect(actions.items.find((item) => item.id === id)?.read).toBe(true);
-  expect(actions.unread).toBe(kind === "demo" ? 3 : 0);
+  expect(actions.unread).toBe(kind === "demo" ? demoUnread - 1 : 0);
   await act(async () => {
     await actions.markAllRead();
     await actions.refresh();
   });
   view.unmount();
   render(tree());
-  await waitFor(() => expect(actions.items).toHaveLength(kind === "demo" ? 6 : 1));
+  await waitFor(() => expect(actions.items).toHaveLength(kind === "demo" ? demoItems.length : 1));
   expect(actions.unread).toBe(0);
   expect(actions.items.every((item) => item.read)).toBe(true);
   expect(accounts.current.fetch).not.toHaveBeenCalled();

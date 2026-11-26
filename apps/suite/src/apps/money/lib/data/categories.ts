@@ -2,9 +2,9 @@
 
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { refuseRedirects } from "@jeswr/guarded-fetch";
+import { type Category, categoryTree, MoneyDocument, putCategories, V } from "@jeswr/solid-money";
 import { NS } from "@jeswr/suite-vocab";
 import { DataFactory } from "n3";
-import { type Category, categoryTree, MoneyDocument, putCategories, V } from "../model";
 import { type MoneyClient, storeOf } from "./container";
 import { allTransactions, bulkCategorise } from "./ledger";
 import { reconcileMutation } from "./mutations";

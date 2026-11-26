@@ -1,0 +1,86 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Profile derived from solid-federation-vocab/sectors/finance/finance.shacl.ttl.
+# This is a compatibility projection, NOT full finance-sector conformance:
+# - FinancialAccount omits core:hasAccountHolder (MUST), hasAccountProvider and
+#   identifiedBy (SHOULD), absent in Suite data; it requires one skos:prefLabel.
+# - Transaction and subtypes omit hasMonetaryAmount and postingTime from generation:
+#   the existing link accepts NamedNode OR BlankNode, and timestamps preserve lexical
+#   xsd:date, xsd:dateTime and legacy plain strings. Package typed views own these MUSTs.
+#   pm:account remains the required account link; hasCounterparty is optional, one IRI
+#   without a core:Agent class requirement (the app never writes that agent's type).
+#   Payment/CardPayment omit payer/payee MUSTs; Transfer's inherited sh:node is flattened.
+# - MonetaryAmount omits fin:amount (decimal) and uses existing schema:currency;
+#   schema:value is an exact decimal STRING in the package view, not a JS number.
+#   Its integer/decimal/double/float/plain-string legacy reads cannot be projected.
+#   The sector currency pattern ^[A-Z]{3}$ is unsupported; validateMoney enforces it.
+# - Balance uses pm:ofAccount instead of core:about; omits the amount link and pm:asOf
+#   for the same blank-node/date reasons; the package view validates these fields.
+# - BudgetCategory is the app's existing category tree: skos:prefLabel/skos:broader,
+#   not allocated (MUST), dcterms:title or categoryConcept. No allocations are invented.
+# - Every projected field is a singleton. Optional app description/category/provenance
+#   and debit/credit links are included. Other account/status/instrument/holding/budget/
+#   ledger/private-equity sector shapes are outside this package's existing surface.
+# - Global suite namespace and pm:Category/pm:parent migration remains vocabulary-only
+#   in migration.ts; no shape aliases (shared/co-typed predicates cannot own aliases).
+# Shapes stay open; unknown triples and graph names are preserved in the facade.
+@prefix fin: <https://jeswr.org/ns/sectors/finance#> .
+@prefix pm: <https://jeswr.org/ns/pod-money#> .
+@prefix schema: <https://schema.org/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix moneysh: <https://jeswr.org/ns/pod-money/shapes#> .
+
+moneysh:AccountShape a sh:NodeShape ; sh:targetClass fin:FinancialAccount ;
+    sh:property [ sh:path skos:prefLabel ; sh:name "label" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:minCount 1 ; sh:severity sh:Violation ] .
+
+moneysh:CategoryShape a sh:NodeShape ; sh:targetClass fin:BudgetCategory ;
+    sh:property [ sh:path skos:prefLabel ; sh:name "label" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:minCount 1 ; sh:severity sh:Violation ] ;
+    sh:property [ sh:path skos:broader ; sh:name "parent" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+moneysh:BalanceShape a sh:NodeShape ; sh:targetClass fin:Balance ;
+    sh:property [ sh:path pm:ofAccount ; sh:name "balanceAccount" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:minCount 1 ; sh:severity sh:Violation ] .
+
+moneysh:MonetaryAmountShape a sh:NodeShape ; sh:targetClass fin:MonetaryAmount ;
+    sh:property [ sh:path schema:currency ; sh:name "currency" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:minCount 1 ; sh:severity sh:Violation ] .
+
+moneysh:TransactionShape a sh:NodeShape ; sh:targetClass fin:Transaction ;
+    sh:property [ sh:path pm:account ; sh:name "account" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:minCount 1 ; sh:severity sh:Violation ] ;
+    sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path pm:category ; sh:name "category" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path fin:hasCounterparty ; sh:name "payee" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path prov:wasDerivedFrom ; sh:name "derivedFrom" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path fin:debitAccount ; sh:name "debitAccount" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path fin:creditAccount ; sh:name "creditAccount" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+moneysh:TransferShape a sh:NodeShape ; sh:targetClass fin:Transfer ;
+    sh:property [ sh:path pm:account ; sh:name "account" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:minCount 1 ; sh:severity sh:Violation ] ;
+    sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path pm:category ; sh:name "category" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path fin:hasCounterparty ; sh:name "payee" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path prov:wasDerivedFrom ; sh:name "derivedFrom" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path fin:debitAccount ; sh:name "debitAccount" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path fin:creditAccount ; sh:name "creditAccount" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+moneysh:PaymentShape a sh:NodeShape ; sh:targetClass fin:Payment ;
+    sh:property [ sh:path pm:account ; sh:name "account" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:minCount 1 ; sh:severity sh:Violation ] ;
+    sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path pm:category ; sh:name "category" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path fin:hasCounterparty ; sh:name "payee" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path prov:wasDerivedFrom ; sh:name "derivedFrom" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path fin:debitAccount ; sh:name "debitAccount" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path fin:creditAccount ; sh:name "creditAccount" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+moneysh:CardPaymentShape a sh:NodeShape ; sh:targetClass fin:CardPayment ;
+    sh:property [ sh:path pm:account ; sh:name "account" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:minCount 1 ; sh:severity sh:Violation ] ;
+    sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path pm:category ; sh:name "category" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path fin:hasCounterparty ; sh:name "payee" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path prov:wasDerivedFrom ; sh:name "derivedFrom" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path fin:debitAccount ; sh:name "debitAccount" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path fin:creditAccount ; sh:name "creditAccount" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
+

@@ -12,8 +12,7 @@ import {
 } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
 import { type Allocation, calculateBudget, formatMoney, parseMoney } from "../budget";
-import { type MoneyDocument, MoneyNode, putMoney } from "./rdf";
-import { iri } from "./validation";
+import { iri, type MoneyDocument, MoneyNode, putMoney } from "./rdf";
 
 export const BUDGET = {
   type: `${NS.FINANCE}Budget`,

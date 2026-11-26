@@ -8,6 +8,7 @@ export const demoAccount: SuiteAccount = {
   id: "demo",
   webId: DEMO_WEBID,
   name: DEMO_NAME,
+  issuer: "https://id.demo.pod/",
   storageUrl: DEMO_ROOT,
   kind: "demo",
 };

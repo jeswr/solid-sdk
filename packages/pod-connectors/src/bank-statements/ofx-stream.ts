@@ -1,13 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 const MAX_TRANSACTION_BYTES = 64 * 1024;
-const DELIMITER_OVERLAP = "</STMTTRN>".length - 1;
+const DELIMITER_OVERLAP = "</BANKACCTFROM>".length - 1;
 
 /** Scan only new input plus delimiter overlap; join a bounded transaction once. */
 export async function* ofxTransactions(
   chunks: AsyncIterable<string>,
   skip: () => void,
-): AsyncGenerator<{ block: string; currency?: string }> {
+): AsyncGenerator<{ block: string; currency?: string; accountId?: string; bankId?: string }> {
   const encoder = new TextEncoder();
   let overlap = "";
   let active = false;
@@ -17,17 +18,36 @@ export async function* ofxTransactions(
   let currency: string | undefined;
   let currencyField: string | undefined;
   let invalidCurrency = false;
+  let accountId: string | undefined;
+  let bankId: string | undefined;
+  let scalar: "ACCTID" | "BANKID" | undefined;
+  let scalarText = "";
+  let invalidScalar = false;
+  let accountFrom = false;
 
   function append(text: string): void {
+    // Preserve the original currency reader independently of account metadata.
     if (currencyField !== undefined) {
       const end = text.search(/[<\r\n]/);
       const value = end < 0 ? text : text.slice(0, end);
-      // CURDEF is a currency code, not an unbounded free-text field.
       if (currencyField.length + value.length <= 64) currencyField += value;
       else invalidCurrency = true;
       if (end >= 0) {
         if (!invalidCurrency) currency = currencyField.trim() || undefined;
         currencyField = undefined;
+      }
+    }
+    if (scalar !== undefined) {
+      const end = text.search(/[<\r\n]/);
+      const value = end < 0 ? text : text.slice(0, end);
+      if (scalarText.length + value.length <= 256) scalarText += value;
+      else invalidScalar = true;
+      if (end >= 0) {
+        const parsed = invalidScalar ? undefined : scalarText.trim() || undefined;
+        if (scalar === "ACCTID") accountId = parsed;
+        else bankId = parsed;
+        scalar = undefined;
+        scalarText = "";
       }
     }
     if (!active || oversized || !text) return;
@@ -48,7 +68,8 @@ export async function* ofxTransactions(
 
   for await (const chunk of chunks) {
     const input = overlap + chunk;
-    const delimiters = /<STMTTRN>|<\/STMTTRN>|<CURDEF>/gi;
+    const delimiters =
+      /<STMTTRN>|<\/STMTTRN>|<CURDEF>|<ACCTID>|<BANKID>|<STMTRS>|<CCSTMTRS>|<\/?(?:BANK|CC)ACCTFROM>/gi;
     let offset = 0;
     for (let match = delimiters.exec(input); match; match = delimiters.exec(input)) {
       append(input.slice(offset, match.index));
@@ -62,12 +83,30 @@ export async function* ofxTransactions(
       }
       append(match[0]);
       if (delimiter === "</STMTTRN>") {
-        if (active && !oversized) yield { block: parts.join(""), currency };
+        if (active && !oversized)
+          yield {
+            block: parts.join(""),
+            currency,
+            ...(accountId === undefined ? {} : { accountId }),
+            ...(bankId === undefined ? {} : { bankId }),
+          };
         active = false;
         parts = [];
+      } else if (delimiter === "<STMTRS>" || delimiter === "<CCSTMTRS>") {
+        accountId = undefined;
+        bankId = undefined;
+        accountFrom = false;
+      } else if (delimiter === "<BANKACCTFROM>" || delimiter === "<CCACCTFROM>") {
+        if (!active) accountFrom = true;
+      } else if (delimiter === "</BANKACCTFROM>" || delimiter === "</CCACCTFROM>") {
+        if (!active) accountFrom = false;
       } else if (delimiter === "<CURDEF>" && !currency) {
         currencyField = "";
         invalidCurrency = false;
+      } else if (!active && accountFrom && (delimiter === "<ACCTID>" || delimiter === "<BANKID>")) {
+        scalar = delimiter.slice(1, -1) as "ACCTID" | "BANKID";
+        scalarText = "";
+        invalidScalar = false;
       }
       offset = delimiters.lastIndex;
     }

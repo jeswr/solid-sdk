@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { createHash } from "node:crypto";
 import * as fsPromises from "node:fs/promises";
 import { mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
@@ -6,11 +8,15 @@ import { get } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stderr as nodeStderr, stdout as nodeStdout } from "node:process";
+import { ownerPolicy, writeWac } from "@jeswr/pod-access";
 import * as podAuth from "@jeswr/pod-auth/node";
+import { HEALTH } from "@jeswr/solid-health";
 import { AclResource, Agent } from "@solid/object";
 import { strToU8, zipSync } from "fflate";
 import { DataFactory } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { HSBC, MONZO } from "../bank-statements/fixtures.js";
+import { PrivateDestinationError } from "../core/errors.js";
 import * as importRunner from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
 import {
@@ -26,7 +32,10 @@ import { writeResource } from "../pod/resource.js";
 import { ProfileTypeIndexAnchor, TypeIndexDataset } from "../pod/type-index.js";
 import * as registryModule from "../registry.js";
 import { spotifyAdapter } from "../spotify/adapter.js";
-import { EXIT_CODES, importFile, parseImportArgs, runCli } from "./cli.js";
+import { createWhoopAdapter, whoopAdapter } from "../whoop/adapter.js";
+import { createWhoopFileAdapter, whoopFileAdapter } from "../whoop/file-adapter.js";
+import { CYCLE } from "../whoop/fixtures.js";
+import { type CliOptions, EXIT_CODES, importFile, parseImportArgs, runCli } from "./cli.js";
 import type { NodeConfig } from "./config.js";
 import * as loopback from "./loopback.js";
 import { createClientCredentialsFetch } from "./pod-auth.js";
@@ -73,15 +82,13 @@ function fixturePod() {
     const url = String(input instanceof Request ? input.url : input);
     const method = init?.method ?? "GET";
     requests.push({ url, method, headers: new Headers(init?.headers), body: init?.body });
-    if (method === "HEAD" && url.endsWith("/state.json"))
-      return new Response(null, {
-        status: pod.get(url) ? 200 : 404,
-        headers: { link: `<${url}.acl>; rel="acl"` },
-      });
-    return pod.fetch(input, {
+    const response = await pod.fetch(input, {
       ...init,
       body: init?.body instanceof Uint8Array ? new TextDecoder().decode(init.body) : init?.body,
     });
+    if (method === "HEAD" && url.endsWith("/state.json"))
+      response.headers.set("link", `<${url}.acl>; rel="acl"`);
+    return response;
   };
   const transport: typeof fetch = async (input, init) => {
     const url = String(input);
@@ -121,6 +128,10 @@ function fixturePod() {
 function store(fetch: typeof globalThis.fetch, id = "spotify") {
   return createStateStore({ ...config, adapterId: id, fetch });
 }
+const privateDestinationChecks = {
+  verifyPrivateDestination: async () => true,
+  confirmPrivateWrite: async () => true,
+}; // The CLI tests use an isolated fixture Pod.
 
 describe("owner-only checkpoint", () => {
   it("finds an ACL relation after other parameters and ignores unrelated or absent rels", async () => {
@@ -1258,6 +1269,184 @@ describe("CLI import", () => {
     expect(JSON.parse(pod.get(url)!)).toEqual({ ...last, lastOutcome: "error" });
     expect(JSON.stringify(options.stderr.mock.calls)).not.toContain("synthetic-private-error");
   });
+  it("resumes partial WHOOP file batches and prints their warning on ordinary reruns", async () => {
+    const bounded = createWhoopFileAdapter(2);
+    vi.spyOn(whoopFileAdapter, "importFile").mockImplementation(bounded.importFile);
+    const { pod, transport } = fixturePod();
+    const path = await configPath();
+    const file = join(path, "..", "sleeps.csv");
+    await writeFile(
+      file,
+      "Sleep onset,Wake onset,Asleep duration (min)\n" +
+        [1, 2, 3]
+          .map((day) => `2026-06-0${day}T22:00:00Z,2026-06-0${day + 1}T06:00:00Z,450`)
+          .join("\n"),
+    );
+    const stderr = vi.fn();
+    const opts = {
+      configPath: path,
+      podTransport: transport,
+      stdout: vi.fn(),
+      stderr,
+      ...privateDestinationChecks,
+    };
+    expect(await runCli(["import", "whoop", "--file", file], opts)).toBe(0);
+    expect(stderr).toHaveBeenCalledWith("WHOOP import partial, re-run to continue.\n");
+    stderr.mockClear();
+    expect(await runCli(["import", "whoop", "--file", file], opts)).toBe(0);
+    expect(stderr).not.toHaveBeenCalled();
+    const data = pod.dataset(`${TEST_POD_ROOT}integrations/whoop/health/observations/2026-06.ttl`);
+    expect(
+      data.getQuads(null, "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", HEALTH.Sleep, null),
+    ).toHaveLength(3);
+  });
+  it("resumes partial WHOOP API batches without requiring --since", async () => {
+    const adapter = createWhoopAdapter({ maxItems: 1, maxRequests: 50 });
+    vi.spyOn(whoopAdapter, "import").mockImplementation(adapter.import);
+    const { pod, transport } = fixturePod();
+    const stderr = vi.fn();
+    const fixtures = fixtureFetch("whoop", whoopAdapter.fixtures());
+    const opts = {
+      configPath: await configPath(),
+      podTransport: transport,
+      ...privateDestinationChecks,
+      stdout: vi.fn(),
+      stderr,
+      sourceAuth: {
+        fetch: (async (input, init) =>
+          String(input).endsWith("/cycle/101")
+            ? Response.json(CYCLE)
+            : fixtures(input, init)) as typeof fetch,
+      },
+    };
+    for (let i = 0; i < 4; i++) expect(await runCli(["import", "whoop"], opts)).toBe(0);
+    const saved = JSON.parse(pod.get(`${TEST_POD_ROOT}integrations/whoop/state.json`) ?? "null");
+    expect(saved.cursor).toBe("2026-06-08T08:00:00.000Z");
+    expect(stderr.mock.calls).toHaveLength(3);
+    expect(pod.get(`${TEST_POD_ROOT}integrations/whoop/health/workouts/2026-06.ttl`)).toContain(
+      "Running",
+    );
+  });
+  // AUTHORED-BY Claude Opus 5.5
+  describe("WHOOP file and API cursor slots", () => {
+    const stateUrl = `${TEST_POD_ROOT}integrations/whoop/state.json`;
+    const sleeps = (days: number[]) =>
+      "Sleep onset,Wake onset,Asleep duration (min)\n" +
+      days.map((day) => `2026-06-0${day}T22:00:00Z,2026-06-0${day + 1}T06:00:00Z,450`).join("\n");
+    async function setup() {
+      const { pod, transport } = fixturePod();
+      const path = await configPath();
+      const file = join(path, "..", "sleeps.csv");
+      await writeFile(file, sleeps([1, 2, 3]));
+      const requests: URL[] = [];
+      const fixtures = fixtureFetch("whoop", whoopAdapter.fixtures());
+      const opts = {
+        configPath: path,
+        podTransport: transport,
+        ...privateDestinationChecks,
+        stdout: vi.fn(),
+        stderr: vi.fn(),
+        sourceAuth: {
+          fetch: (async (input, init) => {
+            requests.push(new URL(String(input)));
+            return String(input).endsWith("/cycle/101")
+              ? Response.json(CYCLE)
+              : fixtures(input, init);
+          }) as typeof fetch,
+        },
+      };
+      const saved = () => JSON.parse(pod.get(stateUrl) ?? "null");
+      return { pod, file, opts, requests, saved };
+    }
+
+    it("resumes --since from the API high-water mark after a file import", async () => {
+      const { file, opts, requests, saved } = await setup();
+      expect(await runCli(["import", "whoop"], opts)).toBe(0);
+      expect(saved().cursor).toBe("2026-06-08T08:00:00.000Z");
+      expect(await runCli(["import", "whoop", "--file", file], opts)).toBe(0);
+      expect(saved().cursor).toBe("2026-06-08T08:00:00.000Z");
+      expect(saved().fileCursor).toMatch(/^\{"file":/);
+      const fileCursor = saved().fileCursor;
+      requests.length = 0;
+      expect(await runCli(["import", "whoop", "--since"], opts)).toBe(0);
+      expect(opts.stderr).not.toHaveBeenCalledWith("Import failed.\n");
+      expect(requests.length).toBeGreaterThan(0);
+      expect(
+        requests
+          .filter((url) => !/\/cycle\/\d+$/.test(url.pathname))
+          .every((url) => url.searchParams.get("start") === "2026-06-01T08:00:00.000Z"),
+      ).toBe(true);
+      expect(saved().cursor).toBe("2026-06-08T08:00:00.000Z");
+      expect(saved().fileCursor).toBe(fileCursor);
+    });
+
+    it("keeps each path's pending batch cursor when runs interleave", async () => {
+      const { pod, file, opts, saved } = await setup();
+      const api = createWhoopAdapter({ maxItems: 1, maxRequests: 50 });
+      const files = createWhoopFileAdapter(2);
+      const apiSeen: (string | undefined)[] = [];
+      const fileSeen: (string | undefined)[] = [];
+      vi.spyOn(whoopAdapter, "import").mockImplementation((ctx) => {
+        apiSeen.push(ctx.cursor);
+        return api.import(ctx);
+      });
+      vi.spyOn(whoopFileAdapter, "importFile").mockImplementation((input, ctx) => {
+        fileSeen.push(ctx.cursor);
+        return files.importFile(input, ctx);
+      });
+      expect(await runCli(["import", "whoop"], opts)).toBe(0);
+      const pendingApi = saved().cursor;
+      expect(pendingApi).toMatch(/^\{"v":1,/);
+      expect(await runCli(["import", "whoop", "--file", file], opts)).toBe(0);
+      const pendingFile = saved().fileCursor;
+      expect(pendingFile).toMatch(/^\{"file":/);
+      expect(JSON.parse(pendingFile).before).not.toBe("");
+      expect(saved().cursor).toBe(pendingApi);
+      expect(await runCli(["import", "whoop"], opts)).toBe(0);
+      expect(saved().fileCursor).toBe(pendingFile);
+      expect(await runCli(["import", "whoop", "--file", file], opts)).toBe(0);
+      expect(JSON.parse(saved().fileCursor).before).toBe("");
+      expect(apiSeen).toEqual([undefined, pendingApi]);
+      expect(fileSeen).toEqual([undefined, pendingFile]);
+      const data = pod.dataset(
+        `${TEST_POD_ROOT}integrations/whoop/health/observations/2026-06.ttl`,
+      );
+      expect(
+        data.getQuads(null, "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", HEALTH.Sleep, null),
+      ).toHaveLength(3);
+    });
+
+    it("strips control characters from adapter warnings before printing them", async () => {
+      const { opts } = await setup();
+      const real = whoopAdapter.import.bind(whoopAdapter);
+      vi.spyOn(whoopAdapter, "import").mockImplementation(async (ctx) => ({
+        ...(await real(ctx)),
+        warnings: ["\u001b[2Jpartial\r\n\u0007batch"],
+      }));
+      expect(await runCli(["import", "whoop"], opts)).toBe(0);
+      // Without ESC, the remaining "[2J" is inert text.
+      expect(opts.stderr).toHaveBeenCalledWith("[2Jpartialbatch\n");
+    });
+    it("classifies a legacy single file cursor into the file slot", async () => {
+      const { pod, opts, requests, saved } = await setup();
+      const legacy = JSON.stringify({ file: "0".repeat(64), before: "" });
+      await pod.fetch(stateUrl, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          connectedAt: "2026-06-01T00:00:00.000Z",
+          cursor: legacy,
+          lastOutcome: "success",
+          counts: { documents: 1, items: 1, skipped: 0 },
+        }),
+      });
+      expect(await runCli(["import", "whoop", "--since"], opts)).toBe(0);
+      // No API cursor yet: a full traversal, not a failure on the file cursor.
+      expect(requests.every((url) => !url.searchParams.has("start"))).toBe(true);
+      expect(saved().cursor).toBe("2026-06-08T08:00:00.000Z");
+      expect(saved().fileCursor).toBe(legacy);
+    });
+  });
   it("imports an export file through the same writer without source login", async () => {
     const { pod, transport } = fixturePod();
     const path = await configPath();
@@ -1671,5 +1860,962 @@ describe("CLI cancellation at the Pod write boundary", () => {
     expect(pod.get(stateUrl)).toBe(checkpoint);
     expect(pod.get(`${container}_provenance.ttl`)).toBe(provenance);
     expect(options.stderr).toHaveBeenCalledWith("Import cancelled.\n");
+  });
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+describe("VeSync CLI", () => {
+  it("imports with isolated account credentials and leaves no secrets in reports, logs, errors or the pod", async () => {
+    const { hashVeSyncPassword } = await import("./vesync-auth.js");
+    const { DEVICES, LOGIN, VESYNC_API } = await import("../vesync/api.js");
+    const { devices, coreStatus } = await import("../vesync/fixtures.js");
+    const sourceRequests: string[] = [];
+    const secrets = [
+      "private-email@example.invalid",
+      "private-plaintext",
+      "private-source-token",
+      "private-account-id",
+    ];
+    const email = secrets[0] ?? "",
+      password = secrets[1] ?? "",
+      passwordHash = hashVeSyncPassword(password);
+    const sourceTransport: typeof fetch = async (input, init) => {
+      sourceRequests.push(String(init?.body));
+      expect(String(init?.body)).not.toContain(password);
+      expect(new Headers(init?.headers).get("authorization")).toBeNull();
+      expect(new Headers(init?.headers).get("dpop")).toBeNull();
+      if (String(input) === VESYNC_API + LOGIN)
+        return Response.json({ code: 0, result: { token: secrets[2], accountID: secrets[3] } });
+      if (String(input) === VESYNC_API + DEVICES)
+        return Response.json({ code: 0, result: { list: [devices[0]] } });
+      return Response.json(coreStatus);
+    };
+    const { pod, transport: podTransport, requests } = fixturePod();
+    const stdout = vi.fn(),
+      stderr = vi.fn(),
+      run = vi.spyOn(importRunner, "runImport");
+    const options = {
+      configPath: await configPath(),
+      sourceTransport,
+      podTransport,
+      stdout,
+      stderr,
+      vesyncCredentials: async () => ({ email, passwordHash }),
+    };
+    expect(await runCli(["import", "vesync", "--room", "Office"], options)).toBe(0);
+    const report = await run.mock.results[0]?.value;
+    const visible = JSON.stringify({
+      report,
+      stdout: stdout.mock.calls,
+      stderr: stderr.mock.calls,
+      pod: pod.urls().map((url) => pod.get(url)),
+    });
+    for (const secret of [...secrets, passwordHash]) {
+      expect(visible).not.toContain(secret);
+      expect(requests.map(({ body }) => String(body)).join("\n")).not.toContain(secret);
+    }
+    expect(sourceRequests).toHaveLength(3);
+    expect(pod.urls().some((url) => url.includes("environment/vesync-"))).toBe(true);
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("Imported vesync"));
+    expect(
+      await runCli(["import", "vesync"], {
+        ...options,
+        sourceTransport: async () => {
+          throw new Error(secrets.join(" "));
+        },
+      }),
+    ).toBe(1);
+    // Only an explicit login rejection is an authentication failure (exit 3).
+    expect(
+      await runCli(["import", "vesync"], {
+        ...options,
+        sourceTransport: async () => Response.json({ code: -11201000, msg: secrets.join(" ") }),
+      }),
+    ).toBe(3);
+    const errors = JSON.stringify(stderr.mock.calls);
+    for (const secret of [...secrets, passwordHash]) expect(errors).not.toContain(secret);
+  });
+  it("polls with protected checkpoint rereads and exits 130 on SIGINT's abort signal", async () => {
+    const { VESYNC_FIXTURES } = await import("../vesync/fixtures.js");
+    const source = vi.fn(fixtureFetch("vesync", VESYNC_FIXTURES));
+    const { transport: podTransport } = fixturePod();
+    const controller = new AbortController(),
+      stdout = vi.fn(),
+      stderr = vi.fn();
+    // Deterministic watch delays: the second sleep stands in for SIGINT during a wait.
+    const sleeps: number[] = [];
+    const sleep = async (milliseconds: number, signal?: AbortSignal) => {
+      sleeps.push(milliseconds);
+      if (sleeps.length === 2) controller.abort();
+      signal?.throwIfAborted();
+    };
+    const code = await runCli(["import", "vesync", "--watch"], {
+      configPath: await configPath(),
+      podTransport,
+      sourceAuth: { fetch: source },
+      stdout,
+      stderr,
+      signal: controller.signal,
+      sleep,
+    });
+    expect(code).toBe(130);
+    expect(sleeps).toEqual([10 * 60000, 10 * 60000]);
+    expect(stdout).toHaveBeenCalledTimes(2);
+    expect(source).toHaveBeenCalledTimes(4);
+    expect(stderr).toHaveBeenCalledWith("Import cancelled.\n");
+  });
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("VeSync watch failure classification", () => {
+  const retrySuffix = " Retrying with backoff.\n";
+  async function watch(
+    options: {
+      login?: () => Response | Promise<Response>;
+      source?: (path: "devices" | "status") => Response | undefined;
+      pod?: (
+        url: string,
+        init: RequestInit | undefined,
+        next: () => Promise<Response>,
+      ) => Promise<Response>;
+      abortAfterSleeps?: number;
+    } = {},
+  ) {
+    const { hashVeSyncPassword } = await import("./vesync-auth.js");
+    const { DEVICES, LOGIN, VESYNC_API } = await import("../vesync/api.js");
+    const { devices, coreStatus } = await import("../vesync/fixtures.js");
+    let logins = 0;
+    const sourceTransport: typeof fetch = async (input) => {
+      if (String(input) === VESYNC_API + LOGIN) {
+        logins++;
+        return options.login
+          ? options.login()
+          : Response.json({ code: 0, result: { token: "t", accountID: "a" } });
+      }
+      const devicesRoute = String(input) === VESYNC_API + DEVICES;
+      const override = options.source?.(devicesRoute ? "devices" : "status");
+      if (override) return override;
+      if (devicesRoute) return Response.json({ code: 0, result: { list: [devices[0]] } });
+      return Response.json(coreStatus);
+    };
+    const { transport } = fixturePod();
+    const podTransport: typeof fetch = (input, init) =>
+      options.pod
+        ? options.pod(String(input), init, () => transport(input, init))
+        : transport(input, init);
+    const controller = new AbortController(),
+      stdout = vi.fn(),
+      stderr = vi.fn();
+    const sleeps: number[] = [];
+    // Injected delays: no fake timers, so real Web Crypto and signals never race a clock.
+    const sleep = async (milliseconds: number, signal?: AbortSignal) => {
+      sleeps.push(milliseconds);
+      if (sleeps.length >= (options.abortAfterSleeps ?? 2)) controller.abort();
+      signal?.throwIfAborted();
+    };
+    const code = await runCli(["import", "vesync", "--watch", "5"], {
+      configPath: await configPath(),
+      podTransport,
+      sourceTransport,
+      vesyncCredentials: async () => ({
+        email: "synthetic@example.invalid",
+        passwordHash: hashVeSyncPassword("synthetic"),
+      }),
+      stdout,
+      stderr,
+      signal: controller.signal,
+      sleep,
+      random: () => 0.5,
+    });
+    const imported = stdout.mock.calls.filter(([text]) => String(text).startsWith("Imported"));
+    return { code, stderr, sleeps, imported: imported.length, logins: () => logins };
+  }
+  const isDay = (url: string) => /\/environment\/vesync-[0-9a-f]{64}\/\d{4}\//.test(url);
+
+  it("retries a VeSync login transport fault, then imports", async () => {
+    let faults = 0;
+    const result = await watch({
+      login: () => {
+        if (++faults === 1) throw new Error("synthetic network fault");
+        return Response.json({ code: 0, result: { token: "t", accountID: "a" } });
+      },
+    });
+    expect(result.code).toBe(130);
+    expect(result.stderr).toHaveBeenCalledWith(
+      `VeSync reading failed; the last successful checkpoint was retained.${retrySuffix}`,
+    );
+    expect(result.imported).toBe(1);
+    expect(result.logins()).toBe(2);
+    expect(result.sleeps).toEqual([5 * 60000, 5 * 60000]);
+  });
+  it("retries a transient state reread failure instead of stopping the watch", async () => {
+    let heads = 0;
+    const result = await watch({
+      abortAfterSleeps: 3,
+      pod: (url, init, next) =>
+        init?.method === "HEAD" && url.endsWith("/state.json") && ++heads === 2
+          ? Promise.resolve(new Response(null, { status: 503 }))
+          : next(),
+    });
+    expect(result.code).toBe(130);
+    expect(result.stderr).toHaveBeenCalledWith(
+      `Cannot read or protect connector state.${retrySuffix}`,
+    );
+    expect(result.imported).toBe(2);
+  });
+  it("retries a 412 concurrent modification on a day document", async () => {
+    let conflicts = 0;
+    const result = await watch({
+      pod: (url, init, next) =>
+        init?.method === "PUT" && isDay(url) && ++conflicts === 1
+          ? Promise.resolve(new Response(null, { status: 412 }))
+          : next(),
+    });
+    expect(result.code).toBe(130);
+    expect(result.stderr).toHaveBeenCalledWith(
+      `Your pod answered HTTP 412; it may recover.${retrySuffix}`,
+    );
+    expect(result.imported).toBe(1);
+  });
+  it("retries a transient checkpoint write failure", async () => {
+    let writes = 0;
+    const result = await watch({
+      pod: (url, init, next) =>
+        init?.method === "PUT" && url.endsWith("/state.json") && ++writes === 1
+          ? Promise.resolve(new Response(null, { status: 502 }))
+          : next(),
+    });
+    expect(result.code).toBe(130);
+    expect(result.stderr).toHaveBeenCalledWith(`Cannot save connector state.${retrySuffix}`);
+    expect(result.imported).toBe(1);
+  });
+  it("stops on a permanent checkpoint write refusal without scheduling a retry", async () => {
+    const result = await watch({
+      abortAfterSleeps: 5,
+      pod: (url, init, next) =>
+        init?.method === "PUT" && url.endsWith("/state.json")
+          ? Promise.resolve(new Response(null, { status: 400 }))
+          : next(),
+    });
+    expect(result.code).toBe(1);
+    expect(result.sleeps).toEqual([]);
+    expect(result.stderr).toHaveBeenCalledWith("Cannot save connector state.\n");
+  });
+  it("logs in afresh on the next cycle after an unexpected VeSync session code", async () => {
+    let lists = 0;
+    const result = await watch({
+      source: (path) =>
+        path === "devices" && ++lists === 1
+          ? Response.json({ code: -11012022, msg: "synthetic" })
+          : undefined,
+    });
+    expect(result.code).toBe(130);
+    expect(result.logins()).toBe(2);
+    expect(result.imported).toBe(1);
+    expect(result.stderr).toHaveBeenCalledWith(
+      `VeSync reading failed; the last successful checkpoint was retained.${retrySuffix}`,
+    );
+  });
+  it.each([401, 403])("stops on a Pod HTTP %i, naming the Pod", async (status) => {
+    const result = await watch({
+      abortAfterSleeps: 5,
+      pod: (url, init, next) =>
+        init?.method === "PUT" && url.includes("/environment/")
+          ? Promise.resolve(new Response(null, { status }))
+          : next(),
+    });
+    expect(result.code).toBe(3);
+    expect(result.sleeps).toEqual([]);
+    expect(result.stderr).toHaveBeenCalledWith(
+      `Your pod refused access (HTTP ${status}); check the Pod client credentials and grants.\n`,
+    );
+  });
+  it("stops when the Pod serves only weak ETags", async () => {
+    const result = await watch({
+      abortAfterSleeps: 5,
+      pod: async (url, init, next) => {
+        const response = await next();
+        if ((init?.method ?? "GET") !== "GET" || !url.includes("/environment/")) return response;
+        const headers = new Headers(response.headers);
+        const etag = headers.get("etag");
+        if (etag) headers.set("etag", `W/${etag}`);
+        return new Response(response.body, { status: response.status, headers });
+      },
+    });
+    expect(result.code).toBe(1);
+    expect(result.imported).toBe(1);
+    expect(result.sleeps).toHaveLength(1);
+    expect(result.stderr).toHaveBeenCalledWith(
+      "Your pod did not return a strong ETag, so readings cannot be updated safely.\n",
+    );
+  });
+  it("stops on a VeSync login rejection with exit 3", async () => {
+    const result = await watch({
+      abortAfterSleeps: 5,
+      login: () => Response.json({ code: -11201000, msg: "synthetic" }),
+    });
+    expect(result.code).toBe(3);
+    expect(result.sleeps).toEqual([]);
+    expect(result.stderr).toHaveBeenCalledWith(
+      "VeSync login failed; check your account credentials.\n",
+    );
+  });
+});
+
+describe("CLI owner-only import destinations", () => {
+  const parent = `${TEST_POD_ROOT}integrations/`;
+  const bankContainer = `${parent}bank-statements/`;
+  const statement = "Date,Description,Amount,Currency\n2026-06-01,Synthetic shop,-5.25,GBP";
+  const statementSlug = "finance/bank-transactions.ttl";
+  const statementUrl = `${bankContainer}${statementSlug}`;
+
+  async function seedPublicRead(fetch: typeof globalThis.fetch, url: string, members: boolean) {
+    const policy = ownerPolicy(TEST_WEBID, members);
+    const [owner] = policy.grants;
+    if (!owner) throw new Error("Expected an owner grant");
+    policy.grants.push({ ...owner, modes: new Set(["read"]), who: [[{ kind: "public" }]] });
+    await fetch(`${url}.acl`, {
+      method: "PUT",
+      body: await writeWac(policy, url, `${url}.acl`),
+    });
+  }
+
+  it.each([
+    ["bank-statements", "bank.csv", statement, statementSlug],
+    [
+      "garmin",
+      "garmin.zip",
+      zipSync({
+        "account@example.test/DI_CONNECT/DI-Connect-Fitness/123_summarizedActivities_20260601.json":
+          strToU8(
+            JSON.stringify([
+              {
+                activityId: 123,
+                activityType: "running",
+                name: "Morning run",
+                beginTimestamp: Date.parse("2026-06-01T06:30:00Z"),
+                duration: 1_985_000,
+              },
+            ]),
+          ),
+      }),
+      "health/activities.ttl",
+    ],
+    [
+      "whoop",
+      "sleeps.csv",
+      "Sleep onset,Wake onset,Asleep duration (min)\n2026-06-01T22:00:00Z,2026-06-02T06:00:00Z,450",
+      "health/observations/2026-06.ttl",
+    ],
+  ] as const)("imports %s with the default verifier", async (id, name, contents, slug) => {
+    const { pod, transport, requests } = fixturePod();
+    const path = await configPath();
+    const file = join(path, "..", name);
+    await writeFile(file, contents);
+    const stdout = vi.fn();
+    const stderr = vi.fn();
+    const container = `${parent}${id}/`;
+    expect(
+      await runCli(["import", id, "--file", file], {
+        configPath: path,
+        podTransport: transport,
+        stdout,
+        stderr,
+      }),
+    ).toBe(EXIT_CODES.success);
+    const firstWrite = requests.findIndex(({ method }) => method === "PUT");
+    expect(requests.slice(0, firstWrite)).toContainEqual(
+      expect.objectContaining({ url: `${TEST_POD_ROOT}.acl`, method: "GET" }),
+    );
+    expect(requests[firstWrite]).toMatchObject({ url: parent, body: new Uint8Array() });
+    expect(
+      requests.filter(({ method, url }) => method === "PUT" && url === `${container}${slug}`),
+    ).toHaveLength(1);
+    expect(pod.dataset(`${container}${slug}`).size).toBeGreaterThan(0);
+    expect(JSON.parse(pod.get(`${container}state.json`) ?? "null")).toMatchObject({
+      lastOutcome: "success",
+    });
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining(`Imported ${id}:`));
+    expect(stderr).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "public parent",
+    "public resource",
+    "unavailable root ACL",
+    "untyped root",
+    "no access model",
+  ])("refuses a bank import with %s before sending any payload", async (problem) => {
+    const { pod, transport, requests } = fixturePod();
+    if (problem === "public parent") await seedPublicRead(pod.fetch, parent, true);
+    if (problem === "public resource") {
+      await pod.fetch(statementUrl, { method: "PUT", body: "" });
+      await seedPublicRead(pod.fetch, statementUrl, false);
+    }
+    const path = await configPath();
+    const file = join(path, "..", "bank.csv");
+    await writeFile(file, statement);
+    const stderr = vi.fn();
+    const stdout = vi.fn();
+    expect(
+      await runCli(["import", "bank-statements", "--file", file], {
+        configPath: path,
+        podTransport: async (input, init) => {
+          const response = await transport(input, init);
+          if (String(input) === `${TEST_POD_ROOT}.acl` && problem === "unavailable root ACL")
+            return new Response(null, { status: 403 });
+          if (String(input) === TEST_POD_ROOT && problem === "untyped root")
+            response.headers.set("link", `<${TEST_POD_ROOT}.acl>; rel="acl"`);
+          if (String(input) === TEST_POD_ROOT && problem === "no access model")
+            response.headers.delete("link");
+          return response;
+        },
+        stdout,
+        stderr,
+      }),
+    ).toBe(EXIT_CODES.import);
+    expect(stderr).toHaveBeenCalledExactlyOnceWith(
+      `${new PrivateDestinationError("bank-statements").message}\n`,
+    );
+    expect(stdout).not.toHaveBeenCalled();
+    const writes = requests.filter(({ method }) => method === "PUT");
+    expect(writes.map(({ url }) => url)).toEqual(
+      problem === "public resource" ? [`${bankContainer}state.json.acl`] : [],
+    );
+    if (problem === "public resource")
+      expect(requests.at(-1)).toMatchObject({ url: `${statementUrl}.acl`, method: "GET" });
+  });
+
+  it.each([false, true])("fails a public checkpoint write (replacement: %s)", async (replacing) => {
+    const { pod, transport, requests } = fixturePod();
+    const path = await configPath();
+    const file = join(path, "..", "bank.csv");
+    await writeFile(file, statement);
+    const checkpoint = `${bankContainer}state.json`;
+    const stderr = vi.fn();
+    const stdout = vi.fn();
+    const args = ["import", "bank-statements", "--file", file];
+    if (replacing) {
+      expect(
+        await runCli(args, { configPath: path, podTransport: transport, stdout, stderr }),
+      ).toBe(0);
+      stdout.mockClear();
+      requests.length = 0;
+    }
+    const podTransport: typeof fetch = async (input, init) => {
+      const response = await transport(input, init);
+      if (String(input) === checkpoint && init?.method === "PUT")
+        await seedPublicRead(pod.fetch, checkpoint, false);
+      return response;
+    };
+    expect(
+      await runCli(args, {
+        configPath: path,
+        podTransport,
+        stdout,
+        stderr,
+      }),
+    ).toBe(EXIT_CODES.import);
+    expect(stderr).toHaveBeenCalledExactlyOnceWith(
+      `${new PrivateDestinationError("bank-statements", { url: checkpoint, removed: !replacing }).message} ${checkpoint}\n`,
+    );
+    expect(stdout).not.toHaveBeenCalled();
+    const deletes = requests.filter(({ method }) => method === "DELETE");
+    if (replacing) {
+      expect(deletes).toEqual([]);
+      expect(JSON.parse(pod.get(checkpoint) ?? "null")).toMatchObject({
+        lastOutcome: "success",
+        counts: { documents: 1 },
+      });
+    } else {
+      expect(deletes).toHaveLength(1);
+      expect(deletes[0]).toMatchObject({ url: checkpoint });
+      expect(deletes[0]?.headers.get("if-match")).toBe('"v1"');
+      expect(requests.at(-1)).toMatchObject({ method: "HEAD", url: checkpoint });
+      expect((await pod.fetch(checkpoint)).status).toBe(404);
+    }
+  });
+
+  it("uses the confirmation HEAD ETag to delete a refused create whose PUT returned none", async () => {
+    const { pod, transport, requests } = fixturePod();
+    const path = await configPath();
+    const file = join(path, "..", "bank.csv");
+    await writeFile(file, statement);
+    const stderr = vi.fn();
+    const podTransport: typeof fetch = async (input, init) => {
+      const response = await transport(input, init);
+      if (String(input) === statementUrl && init?.method === "PUT") {
+        response.headers.delete("etag");
+        await seedPublicRead(pod.fetch, statementUrl, false);
+      }
+      return response;
+    };
+    expect(
+      await runCli(["import", "bank-statements", "--file", file], {
+        configPath: path,
+        podTransport,
+        stdout: vi.fn(),
+        stderr,
+      }),
+    ).toBe(EXIT_CODES.import);
+    expect(stderr).toHaveBeenCalledExactlyOnceWith(
+      `${new PrivateDestinationError("bank-statements", { url: statementUrl, removed: true }).message} ${statementUrl}\n`,
+    );
+    const deletion = requests.find(({ method }) => method === "DELETE");
+    expect(deletion?.url).toBe(statementUrl);
+    expect(deletion?.headers.get("if-match")).toBe('"v1"');
+    expect(pod.get(statementUrl)).toBeUndefined();
+  });
+
+  it.each([
+    "PUT",
+    "HEAD",
+  ] as const)("finishes a private write and reports its refusal after CLI cancellation during %s", async (cancelAt) => {
+    const { pod, transport, requests } = fixturePod();
+    const path = await configPath();
+    const file = join(path, "..", "bank.csv");
+    await writeFile(file, statement);
+    const controller = new AbortController();
+    const stderr = vi.fn();
+    const stdout = vi.fn();
+    let payloadWritten = false;
+    const podTransport: typeof fetch = async (input, init) => {
+      if (String(input) !== statementUrl) return transport(input, init);
+      if (init?.method === cancelAt && (cancelAt === "PUT" || payloadWritten)) controller.abort();
+      init?.signal?.throwIfAborted();
+      const response = await transport(input, init);
+      if (init?.method === "PUT") {
+        payloadWritten = true;
+        await seedPublicRead(pod.fetch, statementUrl, false);
+      }
+      return response;
+    };
+    expect(
+      await runCli(["import", "bank-statements", "--file", file], {
+        configPath: path,
+        podTransport,
+        stdout,
+        stderr,
+        signal: controller.signal,
+      }),
+    ).toBe(EXIT_CODES.import);
+    expect(stderr).toHaveBeenCalledExactlyOnceWith(
+      `${new PrivateDestinationError("bank-statements", { url: statementUrl, removed: true }).message} ${statementUrl}\n`,
+    );
+    expect(stdout).not.toHaveBeenCalled();
+    expect(requests).toContainEqual(expect.objectContaining({ method: "HEAD", url: statementUrl }));
+    expect(requests.slice(-2)).toMatchObject([
+      { method: "DELETE", url: statementUrl },
+      { method: "HEAD", url: statementUrl },
+    ]);
+    expect(pod.get(statementUrl)).toBeUndefined();
+  });
+
+  it("finishes confirmation of an owner-private PUT before reporting CLI cancellation", async () => {
+    const { pod, transport, requests } = fixturePod();
+    const path = await configPath();
+    const file = join(path, "..", "bank.csv");
+    await writeFile(file, statement);
+    const controller = new AbortController();
+    const stdout = vi.fn();
+    const stderr = vi.fn();
+    const confirmPrivateWrite = vi.fn<NonNullable<CliOptions["confirmPrivateWrite"]>>(
+      async ({ fetch, url, signal }) => {
+        expect(signal).toBeUndefined();
+        expect(controller.signal.aborted).toBe(true);
+        return (await fetch(url, { method: "HEAD" })).status === 200;
+      },
+    );
+    expect(
+      await runCli(["import", "bank-statements", "--file", file], {
+        configPath: path,
+        podTransport: async (input, init) => {
+          if (String(input) === statementUrl && init?.method === "PUT") controller.abort();
+          init?.signal?.throwIfAborted();
+          return transport(input, init);
+        },
+        signal: controller.signal,
+        async verifyPrivateDestination({ signal }) {
+          expect(signal).toBe(controller.signal);
+          return true;
+        },
+        confirmPrivateWrite,
+        stdout,
+        stderr,
+      }),
+    ).toBe(EXIT_CODES.cancelled);
+    expect(confirmPrivateWrite).toHaveBeenCalledTimes(1);
+    expect(stderr).toHaveBeenCalledExactlyOnceWith("Import cancelled.\n");
+    expect(stdout).not.toHaveBeenCalled();
+    expect(pod.get(statementUrl)).toBeDefined();
+    expect(pod.get(`${bankContainer}state.json`)).toBeUndefined();
+    expect(requests.some(({ method }) => method === "DELETE")).toBe(false);
+  });
+
+  it.each([
+    "file",
+    "API",
+  ] as const)("replays the same WHOOP %s batch after payload confirmation fails", async (mode) => {
+    const { pod, transport, requests } = fixturePod();
+    const path = await configPath();
+    const stateUrl = `${TEST_POD_ROOT}integrations/whoop/state.json`;
+    const provenance = `${TEST_POD_ROOT}integrations/whoop/_provenance.ttl`;
+    const args = ["import", "whoop"];
+    if (mode === "file") {
+      const adapter = createWhoopFileAdapter(2);
+      vi.spyOn(whoopFileAdapter, "importFile").mockImplementation(adapter.importFile);
+      const file = join(path, "..", "sleeps.csv");
+      await writeFile(
+        file,
+        "Sleep onset,Wake onset,Asleep duration (min)\n" +
+          [1, 2, 3]
+            .map((day) => `2026-06-0${day}T22:00:00Z,2026-06-0${day + 1}T06:00:00Z,450`)
+            .join("\n"),
+      );
+      args.push("--file", file);
+    } else {
+      const adapter = createWhoopAdapter({ maxItems: 1, maxRequests: 50 });
+      vi.spyOn(whoopAdapter, "import").mockImplementation(adapter.import);
+    }
+    const fixtures = fixtureFetch("whoop", whoopAdapter.fixtures());
+    const sourceFetch = vi.fn<typeof fetch>(async (input, init) =>
+      String(input).endsWith("/cycle/101") ? Response.json(CYCLE) : fixtures(input, init),
+    );
+    const stdout = vi.fn();
+    const stderr = vi.fn();
+    const opts = {
+      configPath: path,
+      podTransport: transport,
+      sourceAuth: { fetch: sourceFetch },
+      stdout,
+      stderr,
+      ...privateDestinationChecks,
+    };
+    expect(await runCli(args, opts)).toBe(EXIT_CODES.success);
+    const previous = pod.get(stateUrl);
+    const previousProvenance = pod.get(provenance);
+    resetObservations();
+    expect(
+      await runCli(args, {
+        ...opts,
+        confirmPrivateWrite: async ({ url }) => !url.includes("/health/"),
+      }),
+    ).toBe(EXIT_CODES.import);
+    const failedPayload = requests.find(
+      ({ method, url }) => method === "PUT" && url.includes("/health/"),
+    );
+    if (!failedPayload) throw new Error("Expected a WHOOP payload write");
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining(failedPayload.url));
+    expect(stdout).not.toHaveBeenCalled();
+    expect(requests.filter(({ method }) => method === "PUT").map(({ url }) => url)).toEqual([
+      `${stateUrl}.acl`,
+      failedPayload.url,
+    ]);
+    expect(pod.get(stateUrl)).toBe(previous);
+    expect(pod.get(provenance)).toBe(previousProvenance);
+    const failedSourceRequests = sourceFetch.mock.calls.map(([url]) => String(url));
+    resetObservations();
+    expect(await runCli(args, opts)).toBe(EXIT_CODES.success);
+    expect(
+      requests.find(({ method, url }) => method === "PUT" && url.includes("/health/"))?.url,
+    ).toBe(failedPayload.url);
+    expect(
+      sourceFetch.mock.calls.map(([url]) => String(url)).slice(0, failedSourceRequests.length),
+    ).toEqual(failedSourceRequests);
+    expect(pod.get(stateUrl)).not.toBe(previous);
+
+    function resetObservations() {
+      requests.length = 0;
+      sourceFetch.mockClear();
+      stdout.mockClear();
+      stderr.mockClear();
+    }
+  });
+});
+
+describe("CLI bank statement options", () => {
+  const Bank = `${TEST_POD_ROOT}integrations/bank-statements/finance/bank/`;
+  /** Account folders under finance/bank/, e.g. `hsbc-uk-<sha256>`. */
+  function accountFolders(pod: ReturnType<typeof createMemoryPod>): string[] {
+    return [
+      ...new Set(
+        pod
+          .urls()
+          .filter((url) => url.startsWith(Bank))
+          .map((url) => url.slice(Bank.length).split("/")[0] as string),
+      ),
+    ].sort();
+  }
+  async function exportFile(dir: string, name: string, text: string): Promise<string> {
+    const file = join(dir, "..", name);
+    await writeFile(file, text);
+    return file;
+  }
+
+  it("imports a headerless HSBC UK export with --format hsbc-uk and --account-label", async () => {
+    const { pod, transport } = fixturePod();
+    const path = await configPath();
+    const file = await exportFile(path, "hsbc.csv", HSBC);
+    const stdout = vi.fn(),
+      stderr = vi.fn();
+    expect(
+      await runCli(
+        [
+          "import",
+          "bank-statements",
+          "--file",
+          file,
+          "--format",
+          "hsbc-uk",
+          "--account-label",
+          "Everyday HSBC",
+        ],
+        { configPath: path, podTransport: transport, stdout, stderr, ...privateDestinationChecks },
+      ),
+    ).toBe(0);
+    expect(stderr).not.toHaveBeenCalled();
+    const [folder] = accountFolders(pod);
+    expect(accountFolders(pod)).toEqual([expect.stringMatching(/^hsbc-uk-[0-9a-f]{64}$/)]);
+    expect(pod.get(`${Bank}${folder}/account.ttl`)).toContain("Everyday HSBC");
+    const month = pod.get(`${Bank}${folder}/2026-07.ttl`) ?? "";
+    expect(month).toContain("Synthetic shop, main branch");
+    expect(month).toContain("Synthetic credit");
+    const saved = JSON.parse(
+      pod.get(`${TEST_POD_ROOT}integrations/bank-statements/state.json`) ?? "{}",
+    );
+    expect(saved).toMatchObject({ lastOutcome: "success", counts: { skipped: 0 } });
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("Imported bank-statements:"));
+  });
+
+  it("writes nothing for the same HSBC export without the bank flags", async () => {
+    const { pod, transport } = fixturePod();
+    const path = await configPath();
+    const file = await exportFile(path, "hsbc.csv", HSBC);
+    await runCli(["import", "bank-statements", "--file", file], {
+      configPath: path,
+      podTransport: transport,
+      ...privateDestinationChecks,
+      stdout: vi.fn(),
+      stderr: vi.fn(),
+    });
+    expect(accountFolders(pod)).toEqual([]);
+  });
+
+  it("keeps two Monzo exports in separate account folders when their labels differ", async () => {
+    const { pod, transport } = fixturePod();
+    const path = await configPath();
+    const options = {
+      configPath: path,
+      podTransport: transport,
+      stdout: vi.fn(),
+      stderr: vi.fn(),
+      ...privateDestinationChecks,
+    };
+    for (const [name, label] of [
+      ["joint.csv", "Joint account"],
+      ["personal.csv", "Personal account"],
+    ] as const) {
+      const file = await exportFile(path, name, MONZO);
+      expect(
+        await runCli(
+          [
+            "import",
+            "bank-statements",
+            "--file",
+            file,
+            "--format",
+            "auto",
+            "--account-label",
+            label,
+          ],
+          options,
+        ),
+      ).toBe(0);
+    }
+    const folders = accountFolders(pod);
+    expect(folders).toEqual([
+      expect.stringMatching(/^monzo-[0-9a-f]{64}$/),
+      expect.stringMatching(/^monzo-[0-9a-f]{64}$/),
+    ]);
+    const labels = folders.map((folder) => pod.get(`${Bank}${folder}/account.ttl`) ?? "");
+    expect(labels.filter((doc) => doc.includes("Joint account"))).toHaveLength(1);
+    expect(labels.filter((doc) => doc.includes("Personal account"))).toHaveLength(1);
+    for (const folder of folders)
+      expect(pod.get(`${Bank}${folder}/2026-07.ttl`)).toContain("Synthetic shop");
+    // Without labels the same two exports share one Monzo account folder.
+    const unlabelled = fixturePod();
+    for (const name of ["joint.csv", "personal.csv"])
+      expect(
+        await runCli(["import", "bank-statements", "--file", join(path, "..", name)], {
+          ...options,
+          podTransport: unlabelled.transport,
+        }),
+      ).toBe(0);
+    expect(accountFolders(unlabelled.pod)).toHaveLength(1);
+  });
+
+  it("parses --format auto as detection and an explicit format as the adapter's csvFormat", () => {
+    expect(
+      parseImportArgs(["import", "bank-statements", "--file", "a.csv", "--format", "auto"]),
+    ).toEqual({ id: "bank-statements", file: "a.csv", since: false, bank: {} });
+    expect(
+      parseImportArgs([
+        "import",
+        "bank-statements",
+        "--account-label",
+        "Credit card",
+        "--format",
+        "monzo",
+        "--file",
+        "a.csv",
+      ]),
+    ).toEqual({
+      id: "bank-statements",
+      file: "a.csv",
+      since: false,
+      bank: { csvFormat: "monzo", accountLabel: "Credit card" },
+    });
+    expect(parseImportArgs(["import", "bank-statements", "--file", "a.csv"])).toEqual({
+      id: "bank-statements",
+      file: "a.csv",
+      since: false,
+    });
+  });
+
+  const privateLabel = "synthetic-private-label";
+  it.each(
+    [
+      [["--format", "hsbc"], /--format must be one of: auto, revolut, hsbc-uk, monzo, starling/],
+      [["--format", "ofx"], /--format must be one of/],
+      [["--format", "HSBC-UK", "--account-label", privateLabel], /--format must be one of/],
+      [["--format", "hsbc-uk"], /requires --account-label/],
+      [["--account-label", " \t "], /visible text/],
+      [["--account-label", "\u0001\u0002"], /visible text/],
+      [["--account-label", `${privateLabel}${"x".repeat(257)}`], /at most 256 characters/],
+      [["--account-label"], /Usage/],
+      [["--account-label", "--format", "monzo"], /Usage/],
+      [["--format", "monzo", "--format", "starling"], /Usage/],
+      [["--account-label", "One", "--account-label", "Two"], /Usage/],
+      [[`--account-label=${privateLabel}`], /Usage/],
+      [["--format=monzo"], /Usage/],
+      [["--account-label", `--${privateLabel}`], /Usage/],
+      [["--account-label", "\u200B"], /visible text/],
+      [["--account-label", "\u202E\u200D"], /visible text/],
+      [["--account-label", `${privateLabel}\u202E`], /visible text/],
+      [["--account-label", `${privateLabel}\uFDD0`], /visible text/],
+      [["--account-label", `${privateLabel}\uD800`], /visible text/],
+      [["--account-label", `${privateLabel} `.repeat(300)], /visible text/],
+      [["--account-label", `${privateLabel}${"\u{1F600}".repeat(257)}`], /at most 256 characters/],
+    ].map(([flags, message]) => ({ flags: flags as string[], message: message as RegExp })),
+  )("rejects invalid bank values without Pod I/O: $flags", async ({ flags, message }) => {
+    const { pod, transport } = fixturePod();
+    const path = await configPath();
+    const file = await exportFile(path, "hsbc.csv", HSBC);
+    const podTransport = vi.fn(transport);
+    const stderr = vi.fn();
+    const stdout = vi.fn();
+    const before = pod.urls();
+    expect(
+      await runCli(["import", "bank-statements", "--file", file, ...flags], {
+        configPath: path,
+        podTransport,
+        stdout,
+        stderr,
+      }),
+    ).toBe(EXIT_CODES.config);
+    expect(stderr).toHaveBeenCalledWith(expect.stringMatching(message));
+    expect(JSON.stringify([stderr.mock.calls, stdout.mock.calls])).not.toContain(privateLabel);
+    expect(podTransport).not.toHaveBeenCalled();
+    expect(pod.urls()).toEqual(before);
+  });
+
+  it.each(
+    [
+      ["import", "netflix", "--file", "a.csv", "--format", "monzo"],
+      ["import", "netflix", "--file", "a.csv", "--account-label", "Mine"],
+      ["import", "spotify", "--account-label", "Mine"],
+      ["import", "bank-statements", "--format", "monzo"],
+      ["import", "bank-statements", "--account-label", "Mine"],
+    ].map((args) => ({ args })),
+  )("rejects bank flags for other connectors or without --file: $args", async ({ args }) => {
+    expect(() => parseImportArgs(args)).toThrow(
+      /only supported for bank-statements --file imports/,
+    );
+    const podTransport = vi.fn();
+    expect(
+      await runCli(args, {
+        configPath: await configPath(),
+        podTransport,
+        stdout: vi.fn(),
+        stderr: vi.fn(),
+      }),
+    ).toBe(EXIT_CODES.config);
+    expect(podTransport).not.toHaveBeenCalled();
+  });
+
+  it("accepts 256 emoji as a label (the limit counts code points)", () => {
+    const accountLabel = "\u{1F600}".repeat(256);
+    expect(
+      parseImportArgs([
+        "import",
+        "bank-statements",
+        "--file",
+        "a.csv",
+        "--account-label",
+        accountLabel,
+      ]).bank,
+    ).toEqual({ accountLabel });
+  });
+
+  it("rejects an invalid bank option before reading the config file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "pod-connectors-missing-"));
+    const missing = join(dir, "no-such-config.json");
+    try {
+      for (const flags of [
+        ["--format", "hsbc"],
+        ["--format", "hsbc-uk"],
+        ["--account-label", "\u200B"],
+        ["--account-label=Joint"],
+      ]) {
+        const podTransport = vi.fn();
+        const stderr = vi.fn();
+        expect(
+          await runCli(["import", "bank-statements", "--file", join(dir, "a.csv"), ...flags], {
+            configPath: missing,
+            podTransport,
+            stdout: vi.fn(),
+            stderr,
+          }),
+        ).toBe(EXIT_CODES.config);
+        const message = String(stderr.mock.calls[0]?.[0]);
+        // The bank diagnostic, not the config reader's: parsing ran first.
+        expect(message).toMatch(/--format|--account-label|Usage/);
+        expect(message).not.toContain(missing);
+        expect(message).not.toMatch(/config/i);
+        expect(podTransport).not.toHaveBeenCalled();
+      }
+      // The same command with valid flags does reach the (missing) config file.
+      const stderr = vi.fn();
+      expect(
+        await runCli(
+          ["import", "bank-statements", "--file", join(dir, "a.csv"), "--format", "monzo"],
+          { configPath: missing, podTransport: vi.fn(), stdout: vi.fn(), stderr },
+        ),
+      ).toBe(EXIT_CODES.config);
+      expect(String(stderr.mock.calls[0]?.[0])).toMatch(/^Cannot load config/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("documents the bank options in --help", async () => {
+    const stdout = vi.fn();
+    expect(await runCli(["--help"], { stdout, stderr: vi.fn() })).toBe(0);
+    const help = String(stdout.mock.calls[0]?.[0]);
+    expect(help).toContain("--format <auto|revolut|hsbc-uk|monzo|starling>");
+    expect(help).toContain("--account-label <text>");
+    expect(help).toContain("Only Revolut, HSBC UK, Monzo and Starling CSV exports use it");
+    expect(help).toContain("OFX/QFX and generic CSV");
+    expect(help).toContain("--flag=value and values starting with -- are rejected");
   });
 });

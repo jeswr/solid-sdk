@@ -15,7 +15,7 @@
 import { refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
 import { abortablePodWriter, unlessAborted } from "./abort.js";
 import { RunBudget, type RunLimits, stricterLimits } from "./budget.js";
-import { IntegrationSyncError } from "./errors.js";
+import { IntegrationSyncError, PrivateDestinationError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createImportSession } from "./import-session.js";
 import { budgetedFetch } from "./source-budget.js";
@@ -51,9 +51,9 @@ export interface RunImportOptions extends ConnectorStateOptions {
    * at the PodWriter boundary, immediately before each port call, so a cancel during a pending
    * read (a session's implicit read before a write, the provenance read in finalisation) still
    * stops the write that follows. Pass the same signal to `createFetchPodWriter` to check it
-   * before every HTTP request inside a port and to abort requests in flight. A run cancelled
-   * before it resolves is reported as cancelled, even when the cancel lands while the final
-   * provenance write is in flight (that write may still complete). Once the run has reported
+   * before HTTP dispatch and to abort reads in flight. Dispatched private writes finish
+   * and run confirmation before observing cancellation. A refused write still gets its
+   * independent cleanup and reports the privacy error. Once the run has reported
    * its state through `onState`, it resolves successfully; a cancel then only stops the
    * adapter's best-effort `ImportOutcome.commit` cleanup.
    *
@@ -61,10 +61,11 @@ export interface RunImportOptions extends ConnectorStateOptions {
    * checkpoint writes after it expires, and once the adapter has resolved it no longer fails
    * the run: registration and provenance still complete so the new cursor is reported.
    *
-   * A cancelled run records no activity. Documents and items it already wrote keep
-   * `prov:wasGeneratedBy` naming its activity IRI, which `_provenance.ttl` never describes:
-   * read an activity missing from that document as a cancelled, incomplete run. The next run
-   * that rewrites those documents or items links them to its own activity.
+   * A dispatched private provenance PUT can complete after cancellation. If cancellation
+   * stops it before dispatch, documents and items already written still name its activity IRI
+   * via `prov:wasGeneratedBy`, and `_provenance.ttl` has no description of that activity.
+   * Polling adapters may prune completed summaries with `maxRunActivities`, so absence alone
+   * then does not establish cancellation. The next rewrite links items to its own activity.
    */
   signal?: AbortSignal;
   /** Granted source permissions when the user withheld some (`ImportContext.scopes`). */
@@ -83,8 +84,9 @@ export interface ImportReport {
   cursor?: string;
   /** Items the adapter skipped because the live API sent a malformed shape. */
   skipped?: number;
-  /** Unsupported export products or formats, grouped by product folder. */
+  /** Unsupported source fields, products or formats. */
   unsupported?: readonly string[];
+  warnings?: readonly string[];
   /** The type-index document used/created. */
   indexUrl: string;
 }
@@ -138,7 +140,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       source
         ? `${new URL(source).origin}/`
         : `urn:solid:connector:${encodeURIComponent(id)}:source`,
-      opts,
+      { ...opts, maxRunActivities: adapter.maxRunActivities },
       adapter.vocabMap,
     );
   } catch (error) {
@@ -169,10 +171,11 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       limits,
     });
     imported = true;
+    await session.waitForPrivateWrites();
     // The adapter has committed its data and checkpoints. The source deadline is not a
     // reason to discard them: only the caller's cancellation stops finalisation now.
     opts.signal?.throwIfAborted();
-    const { indexUrl } = await podWriter.registerType(session.registrations());
+    const { indexUrl } = await session.registerTypes();
     opts.signal?.throwIfAborted();
     let state: ConnectorState | undefined;
     await session.finish(async () => {
@@ -196,21 +199,34 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       categories: [...new Set(session.written.map((w) => w.category))],
       cursor: state.cursor,
       skipped: outcome.skipped,
+      ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
+      ...(outcome.unsupported ? { unsupported: outcome.unsupported } : {}),
       indexUrl,
       state,
     };
   } catch (error) {
+    try {
+      await session.waitForPrivateWrites();
+    } catch (refusal) {
+      session.release();
+      throw refusal;
+    }
     // Partial writes already link to this run. Record it when storage is available and the
     // run was not cancelled, preserving the original failure if the provenance write fails.
-    // A cancelled run starts no further Pod I/O, so its writes name an unrecorded activity
-    // (documented on RunImportOptions.signal).
+    // Cancellation stops this attempt to record provenance.
     if (opts.signal?.aborted) session.release();
     else
       try {
         await session.finish();
-      } catch {
-        /* Original failure takes priority. */
+      } catch (provenanceError) {
+        // A refused provenance write can expose data even when the adapter already failed.
+        if (
+          provenanceError instanceof PrivateDestinationError &&
+          provenanceError.phase === "after-write"
+        )
+          throw provenanceError;
       }
+    if (error instanceof PrivateDestinationError && error.phase === "after-write") throw error;
     opts.onState?.(session.state());
     // A cancel can surface as an adapter or write error; callers match the abort reason.
     if (opts.signal?.aborted) throw opts.signal.reason;

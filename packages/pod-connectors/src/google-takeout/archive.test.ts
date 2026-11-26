@@ -552,11 +552,11 @@ describe("Takeout untrusted paths and classification", () => {
   it("escapes every Drive segment and never fetches file URLs", async () => {
     const ctx = context();
     await googleTakeoutFileAdapter.importFile(
-      zipFile({ "Takeout/Drive/a?/#https:%2f.txt": "https://untrusted.example" }),
+      zipFile({ "Takeout/Drive/a?/#https:%20.txt": "https://untrusted.example" }),
       ctx,
     );
     expect(ctx.writeBinary).toHaveBeenCalledWith(
-      expect.objectContaining({ slug: "drive/takeout/a~3F/~23https~3A~252f.txt" }),
+      expect.objectContaining({ slug: "drive/takeout/a~3F/~23https~3A~2520.txt" }),
     );
     expect(ctx.docs.size).toBe(1);
   });
@@ -568,8 +568,21 @@ describe("Takeout untrusted paths and classification", () => {
     );
     expect(report).toMatchObject({
       skipped: 1,
+      unsupported: ["(invalid path): invalid-entry"],
+    });
+  });
+  it("reports safe ZIP names outside the Takeout root without dispatching them", async () => {
+    const ctx = context();
+    const report = await googleTakeoutFileAdapter.importFile(
+      zipFile({ "outside.txt": "ignored" }),
+      ctx,
+    );
+    expect(report).toMatchObject({
+      skipped: 1,
       unsupported: ["(invalid path): unsafe-entry-path"],
     });
+    expect(ctx.writeBinary).not.toHaveBeenCalled();
+    expect(ctx.docs.size).toBe(0);
   });
 });
 

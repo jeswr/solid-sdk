@@ -278,3 +278,12 @@ authoring new Turtle assertions. Existing Python fixture identifiers remain vali
 `SPECIAL_CATEGORIES` is the frozen, readonly inventory behind `isSpecialCategory`.
 Browser consumers can import it from `@jeswr/pkg-memory/categories`, which has no Node
 or RDF imports. The root entry also exports it; financial data remains separate.
+
+`MemoryMandate`, `DEFAULT_MEMORY_SCOPE`, `memoryCategory` and `scopeAdmits` are
+shared recall primitives. The default is a frozen array containing only the full
+DPV-PD Preference IRI. `memoryCategory` expands `pd:` names and rejects other
+namespaces or invalid local names with TypeError. `scopeAdmits(scope, categories)`
+requires a nonempty category list and exact membership for every category after
+CURIE expansion. Undefined scope selects the default; an empty scope grants
+nothing. No wildcard or subclass inference occurs. These helpers do not verify
+a mandate or evaluate purpose policy; the host must do both before recall.

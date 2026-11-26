@@ -5,8 +5,11 @@ import { fetchRdf } from "@jeswr/fetch-rdf";
 import {
   AmbiguousIssuerError,
   createPodAuth,
+  type GrantOwner,
+  type GrantRetirementResult,
   type Identity,
   IssuerNotAuthorizedError,
+  OwnershipChangedError,
   type PodAuth,
   type PodAuthOptions,
 } from "@jeswr/pod-auth";
@@ -26,6 +29,7 @@ import {
   SignInError,
   type SignInHint,
   type SignInOptions,
+  type SignOutResult,
   type SuiteAccount,
 } from "./types";
 
@@ -50,6 +54,12 @@ function isLoopback(hostname: string): boolean {
     hostname === "localhost" || hostname === "[::1]" || /^127(?:\.\d{1,3}){3}$/u.test(hostname)
   );
 }
+/** What a login may commit over: the observed pointer, and whether it replaces that grant. */
+interface LoginPlan {
+  expectRemembered: Awaited<ReturnType<PodAuth["remembered"]>>;
+  reauthorize: boolean;
+}
+
 function accountId(webId: string): string {
   return `solid:${webId}`;
 }
@@ -57,6 +67,8 @@ function signInFailure(error: unknown): SignInError {
   if (error instanceof SignInError) return error;
   if (error instanceof IssuerNotAuthorizedError) return new SignInError("issuer-not-authorized");
   if (error instanceof AmbiguousIssuerError) return new SignInError("ambiguous-issuer");
+  // pod-auth refused to publish over a sign-in another tab committed after this one was decided.
+  if (error instanceof OwnershipChangedError) return new SignInError("session-elsewhere");
   if (
     error instanceof Error &&
     ["AbortError", "CodeRequestCancelledError", "UserCancelledError"].includes(error.name)
@@ -79,7 +91,9 @@ export class SolidBackend implements SessionBackend {
   #auth: PodAuth | undefined;
   #restoring: Promise<SuiteAccount | null> | undefined;
   #account: SuiteAccount | null = null;
+  #identity: Identity | null = null;
   #expired = false;
+  #signedOut = false;
   #version = 0;
   #sessionVersion = 0;
   #attempt: AbortController | undefined;
@@ -153,7 +167,7 @@ export class SolidBackend implements SessionBackend {
   }
 
   #expire(): void {
-    if (this.#expired) return;
+    if (this.#expired || this.#signedOut) return;
     this.#expired = true;
     this.#restoring = undefined;
     ++this.#sessionVersion;
@@ -166,40 +180,38 @@ export class SolidBackend implements SessionBackend {
     }
   }
 
+  async #retire(
+    identity: GrantOwner,
+    operation: "sign-out" | "reauthenticate" | "reject-identity",
+  ): Promise<GrantRetirementResult> {
+    const result = await this.#core().retireIfOwnedBy(identity);
+    if (!result.retired) {
+      const diagnose =
+        result.reason === "missing-grant" || result.reason === "no-grant"
+          ? console.warn
+          : console.info;
+      diagnose("Solid session retirement skipped", { operation, reason: result.reason });
+    }
+    return result;
+  }
+
   async #rejectIdentity(identity: Identity, started: number, session: number): Promise<never> {
     const currentAttempt = () => started === this.#version && session === this.#sessionVersion;
     if (currentAttempt()) {
       this.#restoring = undefined;
-      const core = this.#core();
       try {
-        // logout purges the shared namespace. Check its pointer and live identity, and fence
-        // every awaited read so stale rejection cannot purge a newer shell/other-tab session.
-        const remembered = await core.remembered();
-        if (currentAttempt()) {
-          const current = await core.identity();
-          if (
-            currentAttempt() &&
-            current &&
-            current.webId === identity.webId &&
-            current.issuer === identity.issuer &&
-            current.subject === identity.subject &&
-            current.clientId === identity.clientId &&
-            current.protocol === identity.protocol &&
-            current.storages.length === identity.storages.length &&
-            current.storages.every((storage, index) => storage === identity.storages[index]) &&
-            remembered.every(
-              (value) => value.webId === identity.webId && value.issuer === identity.issuer,
-            )
-          ) {
-            this.#account = null;
-            this.#expired = false;
-            ++this.#sessionVersion;
-            await core.logout();
-          }
+        // pod-auth compares the exact grant and cleans up under its namespace lock, including
+        // across tabs. The rejected snapshot cannot retire a newer sign-in for the same WebID.
+        const result = await this.#retire(identity, "reject-identity");
+        if (result.retired && currentAttempt()) {
+          this.#account = null;
+          this.#identity = null;
+          this.#expired = false;
+          ++this.#sessionVersion;
         }
       } catch {
         // pod-auth attempts local cleanup even if revocation fails. Keep the actionable
-        // identity error; failed ownership reads must never trigger an unfenced logout.
+        // identity error; failed ownership reads must never trigger unconditional logout.
       }
     }
     throw new SignInError("invalid-identity");
@@ -251,7 +263,7 @@ export class SolidBackend implements SessionBackend {
 
   restore(): Promise<SuiteAccount | null> {
     if (!this.#options.createAuth && typeof window === "undefined") return Promise.resolve(null);
-    if (this.#expired) return Promise.resolve(null);
+    if (this.#expired || this.#signedOut) return Promise.resolve(null);
     if (this.#restoring) return this.#restoring;
     const restoring = (async () => {
       const started = this.#version;
@@ -261,6 +273,7 @@ export class SolidBackend implements SessionBackend {
       const account = await this.#mapAccount(identity, started, session);
       if (started !== this.#version || session !== this.#sessionVersion) return null;
       this.#account = account;
+      this.#identity = identity;
       this.#expired = false;
       return account;
     })();
@@ -269,6 +282,60 @@ export class SolidBackend implements SessionBackend {
       if (this.#restoring === restoring) this.#restoring = undefined;
     });
     return restoring;
+  }
+
+  /**
+   * Returns a login plan when login cannot overwrite another owner: nothing is remembered, or a
+   * WebID hint names every remembered session and it cannot be restored, so the same account
+   * reauthorizes to replace its own unusable grant. The plan carries the observed pointer, which
+   * pod-auth compares again under its mutation lock before publishing. A remembered session is
+   * restored and returned without login only when a WebID hint names it exactly. A provider hint
+   * cannot identify the account, so it never lands in another account's session, even on a
+   * shared issuer; it and any other mismatch are refused with `session-elsewhere`, because this
+   * tab shows no account to sign out.
+   */
+  async #adoptLiveSession(
+    core: PodAuth,
+    target: Awaited<ReturnType<typeof resolveLoginTarget>>,
+    signal: AbortSignal,
+    started: number,
+  ): Promise<SuiteAccount | LoginPlan> {
+    const current = (session?: number) => {
+      signal.throwIfAborted();
+      if (started !== this.#version || (session !== undefined && session !== this.#sessionVersion))
+        throw new SignInError("cancelled");
+    };
+    const matches = (owner: { webId: string | null }) =>
+      target.kind === "webid" && owner.webId === target.webId;
+    const remembered = await core.remembered();
+    current();
+    if (remembered.length === 0) return { expectRemembered: remembered, reauthorize: false };
+    if (!remembered.every(matches)) throw new SignInError("session-elsewhere");
+    const session = this.#sessionVersion;
+    const identity = await core.restore();
+    current();
+    if (!identity) {
+      // pod-auth keeps the pointer after refresh failures other than invalid_grant, and an
+      // expiry emitted during restore advances the session counter, so no session fence
+      // applies here. Login may proceed once the pointer is gone or still names only this
+      // WebID; a pointer that changed to another account still refuses. A surviving pointer's
+      // grant cannot renew (login would retry the same refresh), so the account reauthorizes.
+      const remaining = await core.remembered();
+      current();
+      if (!remaining.every(matches)) throw new SignInError("session-elsewhere");
+      return { expectRemembered: remaining, reauthorize: remaining.length > 0 };
+    }
+    current(session);
+    if (!matches(identity)) throw new SignInError("session-elsewhere");
+    const account = await this.#mapAccount(identity, started, session);
+    current(session);
+    this.#account = account;
+    this.#identity = identity;
+    this.#expired = false;
+    this.#signedOut = false;
+    ++this.#sessionVersion;
+    this.#restoring = Promise.resolve(account);
+    return account;
   }
 
   async signIn(hint: SignInHint, options: SignInOptions = {}): Promise<SuiteAccount> {
@@ -325,24 +392,53 @@ export class SolidBackend implements SessionBackend {
       if ("issuer" in hint ? target.kind !== "issuer" : target.kind !== "webid")
         throw new SignInError("invalid-url");
       attempt.signal.throwIfAborted();
-      if (this.#expired) {
-        const identity = await core.identity();
-        const remembered = await core.remembered();
-        const owns = (value: { webId: string | null; issuer: string }) =>
-          value.webId === this.#account?.webId && value.issuer === this.#account.issuer;
-        // Another tab may already have signed into a newer account under the shared namespace.
-        // Reauthentication must not purge that account's grant.
-        if (identity ? !owns(identity) : remembered.some((value) => !owns(value)))
-          throw new SignInError("account-active");
+      let plan: LoginPlan;
+      if (this.#expired && this.#identity) {
+        // Retain the accepted grant snapshot even after expiry. Reading current account metadata
+        // cannot distinguish a fresh authorization for that same account in another tab.
+        const identity = this.#identity;
+        const result = await this.#retire(identity, "reauthenticate");
         attempt.signal.throwIfAborted();
-        if (identity || remembered.length) await core.logout();
+        if (started !== this.#version) throw new SignInError("cancelled");
+        if (
+          !result.retired &&
+          (result.reason === "owner-changed" || result.reason === "grant-changed")
+        )
+          throw new SignInError("account-active");
+        // A pointer for another account, whether a legacy one or a sign-in after this
+        // retirement, still blocks switching; an empty pointer or the expired account itself
+        // permits login. pod-auth compares this observation again before publishing.
+        const remembered = await core.remembered();
+        attempt.signal.throwIfAborted();
+        if (started !== this.#version) throw new SignInError("cancelled");
+        if (
+          remembered.some(
+            (account) => account.webId !== identity.webId || account.issuer !== identity.issuer,
+          )
+        )
+          throw new SignInError("account-active");
+        plan = { expectRemembered: remembered, reauthorize: false };
         this.#account = null;
+        this.#identity = null;
+        this.#expired = false;
+        this.#restoring = undefined;
+      } else {
+        // No account is held: after a skipped sign-out, or when a cold restore expired without
+        // an accepted snapshot to retire. A login would install a new namespace owner and
+        // supersede another tab's live session, so adopt or refuse it first.
+        const adopted = await this.#adoptLiveSession(core, target, attempt.signal, started);
+        if ("id" in adopted) return adopted;
+        plan = adopted;
       }
       attempt.signal.throwIfAborted();
       this.#authorizing = true;
       const identity = await core.login(
         target.kind === "webid" ? { webId: target.webId } : { issuer: target.issuer },
-        { signal: attempt.signal },
+        {
+          signal: attempt.signal,
+          expectRemembered: plan.expectRemembered,
+          ...(plan.reauthorize ? { reauthorize: true } : {}),
+        },
       );
       // Once pod-auth has committed the grant, cancellation belongs to the completed attempt.
       // Display metadata is best effort and cannot abandon an already committed session.
@@ -353,7 +449,9 @@ export class SolidBackend implements SessionBackend {
       if (started !== this.#version || session !== this.#sessionVersion)
         throw new SignInError("cancelled");
       this.#account = account;
+      this.#identity = identity;
       this.#expired = false;
+      this.#signedOut = false;
       ++this.#sessionVersion;
       this.#restoring = Promise.resolve(account);
       return account;
@@ -368,22 +466,38 @@ export class SolidBackend implements SessionBackend {
     }
   }
 
-  async signOut(account: SuiteAccount): Promise<void> {
+  async signOut(account: SuiteAccount): Promise<SignOutResult> {
     if (account.kind !== "solid" || account.id !== accountId(account.webId)) return;
-    const core = this.#core();
-    const remembered = await core.remembered();
-    const identity = await core.identity();
-    const owns = (value: { webId: string | null; issuer: string }) =>
-      value.webId === account.webId && (!account.issuer || value.issuer === account.issuer);
-    // Signing out a stale remembered shell row cannot purge the active account.
-    if (identity ? !owns(identity) : !remembered.some(owns)) return;
-    ++this.#version;
-    ++this.#sessionVersion;
-    this.#attempt?.abort();
-    this.#account = null;
-    this.#expired = false;
-    this.#restoring = undefined;
-    await core.logout();
+    const identity = this.#identity;
+    if (
+      identity &&
+      (identity.webId !== account.webId || (account.issuer && identity.issuer !== account.issuer))
+    )
+      return;
+    try {
+      const result = await this.#retire(
+        identity ?? { webId: account.webId, issuer: account.issuer ?? "" },
+        "sign-out",
+      );
+      // Only an ownership change means another tab holds a live session. Without an owned or
+      // identified grant there is nothing to report.
+      if (
+        !result.retired &&
+        (result.reason === "owner-changed" || result.reason === "grant-changed")
+      )
+        return { notice: "Signed out here. A session in another tab may still be active." };
+    } finally {
+      // The shell row is already removed. Detach this tab even when another tab owns the
+      // credentials, and fence all pending work before it can restore the removed account.
+      ++this.#version;
+      ++this.#sessionVersion;
+      this.#attempt?.abort();
+      this.#account = null;
+      this.#identity = null;
+      this.#expired = false;
+      this.#signedOut = true;
+      this.#restoring = undefined;
+    }
   }
 
   fetchFor(account: SuiteAccount): typeof fetch {
@@ -399,11 +513,11 @@ export class SolidBackend implements SessionBackend {
       if (!usable()) throw new Error("Sign in to continue");
       const core = this.#core();
       const identity = await core.identity();
+      if (!usable()) throw new Error("Sign in to continue");
       if (!identity || identity.webId !== account.webId || identity.issuer !== account.issuer) {
         this.#expire();
         throw new Error("Sign in to continue");
       }
-      if (!usable()) throw new Error("Sign in to continue");
       const response = await core.fetch(input, init);
       if (!usable()) throw new Error("Sign in to continue");
       return response;

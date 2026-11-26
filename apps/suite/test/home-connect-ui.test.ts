@@ -34,6 +34,46 @@ function button(host: HTMLElement, label: string) {
   return found;
 }
 
+it("offers Spotify file import without a client and completes through the shared flow", async () => {
+  const spotify = registry.adapterById("spotify");
+  const original = spotify?.oauth;
+  if (!spotify || !original) throw new Error("Missing Spotify adapter");
+  Object.assign(spotify, { oauth: { ...original, clientId: undefined } });
+  try {
+    const { host } = await mount(h(ConnectFlow, { service: "spotify" }));
+    const selected = host.querySelector<HTMLInputElement>('input[name="spotify-path"]:checked');
+    expect(selected?.parentElement?.textContent).toContain("no Spotify app needed");
+    await click(button(host, "Continue"));
+    const input = host.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("Missing Spotify export picker");
+    Object.defineProperty(input, "files", {
+      value: [
+        new File(
+          [
+            JSON.stringify([
+              {
+                endTime: "2026-10-03 12:00",
+                trackName: "Fixture Song",
+                artistName: "Fixture Artist",
+                msPlayed: 500,
+              },
+            ]),
+          ],
+          "StreamingHistory_music_0.json",
+        ),
+      ],
+    });
+    await act(() => input.dispatchEvent(new Event("change", { bubbles: true })));
+    await vi.waitFor(() =>
+      expect(host.querySelector(".hm-connect-result h2")?.textContent).toMatch(
+        /^Added \d+ items? to Media$/,
+      ),
+    );
+  } finally {
+    Object.assign(spotify, { oauth: original });
+  }
+});
+
 it.each([
   [[{ header: "Calendar", title: "Meeting" }], "Added 1 item to Calendar", ["calendar"]],
   [
@@ -249,6 +289,48 @@ it("keeps the live region and a focus target mounted offline and restores focus 
   expect(liveRegion(host)).toBe(region);
   expect(region.textContent).toBe("");
   expect(document.activeElement).toBe(heading(host, "Sign in to Strava"));
+});
+
+it("shows and announces a private write refusal that arrives while offline", async () => {
+  const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+  const started = deferred<void>();
+  const acknowledge = deferred<void>();
+  const payload = `${session.storageUrl}integrations/bank-statements/finance/bank-transactions.ttl`;
+  const fetch = session.fetch;
+  let stored = false;
+  session.fetch = async (input, init) => {
+    if (String(input) === payload) {
+      if (init?.method === "PUT") {
+        started.resolve();
+        await acknowledge.promise;
+        init.signal?.throwIfAborted();
+        stored = true;
+      } else if (stored && (init?.method === "HEAD" || init?.method === "DELETE")) {
+        return new Response(null, { status: 403 });
+      }
+    }
+    return fetch(input, init);
+  };
+  const { host } = await mount(h(ConnectFlow, { service: "bank-statements" }));
+  const region = liveRegion(host);
+  await click(button(host, "Continue"));
+  const input = host.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("Missing bank statement picker");
+  Object.defineProperty(input, "files", {
+    value: [new File(["Date,Description,Amount,Currency\n2026-06-01,Shop,-5,GBP"], "bank.csv")],
+  });
+  await act(() => input.dispatchEvent(new Event("change", { bubbles: true })));
+  await act(() => started.promise);
+  onLine.mockReturnValue(false);
+  await act(() => window.dispatchEvent(new Event("offline")));
+  await act(() => acknowledge.resolve());
+  const warning = "A file was written to your pod and may be visible to other people.";
+  await vi.waitFor(() => {
+    expect(host.querySelector(".hm-connect-offline")?.textContent).toContain(warning);
+    expect(liveRegion(host)).toBe(region);
+    expect(region.textContent).toContain(warning);
+    expect(region.textContent).toContain("Removal of the file could not be confirmed.");
+  });
 });
 
 it("never pulls focus from outside the flow when the connection changes", async () => {

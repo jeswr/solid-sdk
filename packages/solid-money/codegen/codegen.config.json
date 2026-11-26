@@ -1,0 +1,70 @@
+{
+  "shapesBase": "https://jeswr.org/ns/pod-money/shapes#",
+  "prefixes": {
+    "fin": "https://jeswr.org/ns/sectors/finance#",
+    "pm": "https://jeswr.org/ns/pod-money#",
+    "schema": "https://schema.org/",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "prov": "http://www.w3.org/ns/prov#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  },
+  "entities": [
+    {
+      "targetClass": "https://jeswr.org/ns/sectors/finance#FinancialAccount",
+      "name": "Account",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/sectors/finance#BudgetCategory",
+      "name": "Category",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/sectors/finance#Balance",
+      "name": "Balance",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/sectors/finance#MonetaryAmount",
+      "name": "MonetaryAmount",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/sectors/finance#Transaction",
+      "name": "Transaction",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/sectors/finance#Transfer",
+      "name": "Transfer",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/sectors/finance#Payment",
+      "name": "Payment",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/sectors/finance#CardPayment",
+      "name": "CardPayment",
+      "subject": {
+        "convention": "self"
+      }
+    }
+  ]
+}

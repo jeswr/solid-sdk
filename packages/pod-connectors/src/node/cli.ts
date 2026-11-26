@@ -1,11 +1,24 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import { constants, createReadStream } from "node:fs";
 import { open } from "node:fs/promises";
 import { basename } from "node:path";
 import { stderr as nodeStderr, stdout as nodeStdout } from "node:process";
 import { Readable } from "node:stream";
+import { accessModel } from "@jeswr/pod-access/requests-solid";
+import type { StorageClient } from "@jeswr/storage-client";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
+import {
+  BANK_CSV_FORMATS,
+  type BankStatementOptions,
+  createBankStatementsFileAdapter,
+  MAX_BANK_ACCOUNT_LABEL_CHARS,
+  validateBankOptions,
+} from "../bank-statements/file-adapter.js";
+import { abortableFetch } from "../core/abort.js";
+import { PrivateDestinationError } from "../core/errors.js";
 import {
   type FileImportAdapter,
   type ImportFile,
@@ -13,32 +26,84 @@ import {
   runFileImport,
 } from "../core/file-import.js";
 import { createSourceAuth, runImport } from "../core/import-runner.js";
-import { adapterContainer } from "../core/pod-writer-policy.js";
-import { createStoragePodWriter } from "../core/storage-pod-writer.js";
-import type { ConnectorState, SourceAuth } from "../core/types.js";
+import {
+  adapterContainer,
+  requirePrivateDestination,
+  requiresPrivateDestination,
+} from "../core/pod-writer-policy.js";
+import { createOwnerOnlyDestinationChecks } from "../core/private-destination.js";
+import { createStoragePodWriter, createWacImportStorage } from "../core/storage-pod-writer.js";
+import type { ConnectorState, PrivateWriteVersion, SourceAuth } from "../core/types.js";
 import { fileAdapterById } from "../file-adapters.js";
 import { createRegistry } from "../registry.js";
+import { createVeSyncAdapter } from "../vesync/adapter.js";
+import { REQUEST_TIMEOUT_MS } from "../vesync/api.js";
+import { VeSyncAuthError } from "../vesync/errors.js";
 import { readNodeConfig } from "./config.js";
 import { NodeRuntimeError } from "./errors.js";
 import { authorizeLoopback } from "./loopback.js";
 import { createClientCredentialsFetch } from "./pod-auth.js";
-import { createStateStore } from "./state.js";
+import { type CliConnectorState, createStateStore } from "./state.js";
+import {
+  createVeSyncSourceAuth,
+  readVeSyncCredentials,
+  type VeSyncCredentials,
+} from "./vesync-auth.js";
+import { classifyVeSyncFailure, VeSyncRunFailure } from "./vesync-failure.js";
+import { type delay, watchImports } from "./watch.js";
 
-const USAGE = "Usage: pod-connectors import <id> [--file <path>] [--since]\n";
+const BANK_ID = "bank-statements";
+const BANK_FORMATS = ["auto", ...BANK_CSV_FORMATS] as const;
+const USAGE = `Usage: pod-connectors import <id> [--file <path>] [--since] [--watch [minutes]] [--room <label> | --room <sensor-slug>=<label>]
+       pod-connectors import ${BANK_ID} --file <path> [--format <format>] [--account-label <text>]
+
+Bank statement options (${BANK_ID} file imports only):
+  --format <${BANK_FORMATS.join("|")}>
+      CSV layout. Default auto detects it from the contents, including generic CSV and
+      OFX/QFX; a bank format accepts only that bank's CSV (OFX/QFX is still read).
+      Headerless HSBC UK exports need --format hsbc-uk.
+  --account-label <text>
+      A stable name for the account: visible text, at most ${MAX_BANK_ACCOUNT_LABEL_CHARS} characters
+      (code points) after control and format characters are removed and it is trimmed.
+      Required for hsbc-uk. Only Revolut, HSBC UK, Monzo and Starling CSV exports use it:
+      give two accounts of the same bank different labels there. OFX/QFX and generic CSV
+      ignore it (the import reports this) and replace one shared document.
+
+Give each value as its own argument: --flag=value and values starting with -- are rejected.
+`;
 
 /** Stable process exit codes; library users receive the code without terminating their host. */
 export const EXIT_CODES = { success: 0, import: 1, config: 2, auth: 3, cancelled: 130 } as const;
 
+interface DestinationContext {
+  url: string;
+  storage: StorageClient;
+  fetch: typeof fetch;
+  ownerWebId: string;
+  signal?: AbortSignal;
+}
+
 /** Injectable Node host ports. Fixture SourceAuth bypasses interactive source login only. */
 export interface CliOptions {
   readonly configPath?: string;
+  /** Node-only account port; returns an MD5 hash, never plaintext. */
+  readonly vesyncCredentials?: () => Promise<VeSyncCredentials>;
   readonly stdout?: (message: string) => void;
   readonly stderr?: (message: string) => void;
   readonly podTransport?: typeof fetch;
+  /** Override the default owner-only destination verifier. */
+  readonly verifyPrivateDestination?: (options: DestinationContext) => Promise<boolean>;
+  /** Override the default confirmation of a successful private write. */
+  readonly confirmPrivateWrite?: (
+    options: DestinationContext & PrivateWriteVersion & { observeEtag?: (etag: string) => void },
+  ) => Promise<boolean>;
   readonly sourceTransport?: typeof fetch;
   readonly sourceAuth?: SourceAuth;
   readonly openAuthorizationUrl?: (url: string) => void | Promise<void>;
   readonly signal?: AbortSignal;
+  /** Fixture seams for `--watch` and VeSync retry delays (abortable sleep, jitter source). */
+  readonly sleep?: typeof delay;
+  readonly random?: () => number;
 }
 
 /** Parse the deliberately small D7 command surface without accepting unknown flags. */
@@ -46,22 +111,106 @@ export function parseImportArgs(args: readonly string[]): {
   id: string;
   file?: string;
   since: boolean;
+  watch?: number;
+  room?: string | Readonly<Record<string, string>>;
+  /** Validated bank-statements adapter options; present only when a bank flag was given. */
+  bank?: BankStatementOptions;
 } {
   const [command, id, ...flags] = args;
   if (command !== "import" || !id || !/^[a-z0-9-]+$/.test(id))
     throw new NodeRuntimeError("config", USAGE.trim());
   let file: string | undefined;
+  let format: string | undefined;
+  let accountLabel: string | undefined;
   let since = false;
+  let watch: number | undefined;
+  let room: string | undefined;
+  const rooms: Record<string, string> = {};
   for (let i = 0; i < flags.length; i++) {
     const flag = flags[i];
-    if (flag === "--since" && !since) since = true;
-    else if (flag === "--file" && !file && flags[i + 1] && !flags[i + 1]?.startsWith("--"))
-      file = flags[++i];
+    const value = flags[i + 1];
+    const hasValue = !!value && !value.startsWith("--");
+    if (flag === "--watch" && watch === undefined) {
+      const next = flags[i + 1];
+      watch = next && !next.startsWith("--") ? Number(flags[++i]) : 10;
+      if (!Number.isFinite(watch) || watch < 5 || watch > 1440)
+        throw new NodeRuntimeError("config", "--watch minutes must be between 5 and 1440.");
+    } else if (flag === "--room" && flags[i + 1] && !flags[i + 1]?.startsWith("--")) {
+      const label = flags[++i] as string;
+      const match = /^(vesync-[a-f0-9]{64})=(.*)$/.exec(label);
+      if (
+        label.length > 400 ||
+        Array.from(label).some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) ||
+        !label.trim()
+      )
+        throw new NodeRuntimeError("config", "Invalid room label.");
+      if (
+        match?.[2] &&
+        match[2].length <= 256 &&
+        match[2].trim() &&
+        !room &&
+        !rooms[match[1] as string]
+      )
+        rooms[match[1] as string] = match[2] as string;
+      else if (!match && !room && !Object.keys(rooms).length && label.length <= 256) room = label;
+      else
+        throw new NodeRuntimeError(
+          "config",
+          "Use one room label or distinct sensor-slug=label mappings.",
+        );
+    } else if (flag === "--since" && !since) since = true;
+    else if (flag === "--file" && file === undefined && hasValue) file = flags[++i];
+    else if (flag === "--format" && format === undefined && hasValue) format = flags[++i];
+    else if (flag === "--account-label" && accountLabel === undefined && hasValue)
+      accountLabel = flags[++i];
     else throw new NodeRuntimeError("config", USAGE.trim());
   }
   if (file && since)
     throw new NodeRuntimeError("config", "--since is only supported for API imports.");
-  return { id, file, since };
+  if (
+    (watch !== undefined || room !== undefined || Object.keys(rooms).length) &&
+    (id !== "vesync" || file || since)
+  )
+    throw new NodeRuntimeError(
+      "config",
+      "--watch and --room require a VeSync API import without --since.",
+    );
+  const result = {
+    id,
+    file,
+    since,
+    ...(watch !== undefined ? { watch } : {}),
+    ...(room !== undefined ? { room } : Object.keys(rooms).length ? { room: rooms } : {}),
+  };
+  if (format === undefined && accountLabel === undefined) return result;
+  if (id !== BANK_ID || !file)
+    throw new NodeRuntimeError(
+      "config",
+      `--format and --account-label are only supported for ${BANK_ID} --file imports.`,
+    );
+  // Never echo the supplied values: an account label can be personal.
+  if (format !== undefined && !(BANK_FORMATS as readonly string[]).includes(format))
+    throw new NodeRuntimeError("config", `--format must be one of: ${BANK_FORMATS.join(", ")}.`);
+  const bank: BankStatementOptions = {
+    ...(format !== undefined &&
+      format !== "auto" && { csvFormat: format as BankStatementOptions["csvFormat"] }),
+    ...(accountLabel !== undefined && { accountLabel }),
+  };
+  if (bank.csvFormat === "hsbc-uk" && accountLabel === undefined)
+    throw new NodeRuntimeError(
+      "config",
+      "--format hsbc-uk requires --account-label: HSBC UK exports do not name the account.",
+    );
+  try {
+    // The adapter's own validation, so both surfaces accept exactly the same labels.
+    validateBankOptions(bank);
+  } catch {
+    throw new NodeRuntimeError(
+      "config",
+      `--account-label must contain visible text and at most ${MAX_BANK_ACCOUNT_LABEL_CHARS} characters.`,
+    );
+  }
+  return { ...result, bank };
 }
 
 export async function importFile(path: string, adapter: FileImportAdapter): Promise<ImportFile> {
@@ -137,6 +286,20 @@ export async function importFile(path: string, adapter: FileImportAdapter): Prom
   }
 }
 
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point.
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
+
+/** Split a checkpoint into its API and file cursor slots. A checkpoint written before the
+ * file slot existed held one shared cursor: classify it by shape, since only a WHOOP file
+ * batch cursor is a `{"file":…}` object. */
+function cursorSlots(state: CliConnectorState | undefined): { api?: string; file?: string } {
+  const legacyFile = state?.cursor?.startsWith('{"file":') ?? false;
+  return {
+    api: legacyFile ? undefined : state?.cursor,
+    file: state?.fileCursor ?? (legacyFile ? state?.cursor : undefined),
+  };
+}
+
 /** Execute one import, persisting successful or failed outcomes without printing arbitrary errors. */
 export async function runCli(args: readonly string[], options: CliOptions = {}): Promise<number> {
   const stdout = options.stdout ?? ((message) => nodeStdout.write(message));
@@ -150,49 +313,137 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
     const command = parseImportArgs(args);
     const config = await readNodeConfig(options.configPath);
     const registry = createRegistry(config.connectors);
-    const adapter = registry.adapterById(command.id);
-    const fileAdapter = fileAdapterById(command.id);
+    const adapter =
+      command.id === "vesync"
+        ? createVeSyncAdapter({ room: command.room })
+        : registry.adapterById(command.id);
+    const fileAdapter = command.bank
+      ? createBankStatementsFileAdapter(command.bank)
+      : fileAdapterById(command.id);
     if ((command.file && !fileAdapter) || (!command.file && !adapter))
       throw new NodeRuntimeError(
         "config",
         "Unknown connector or unsupported import mode; file connectors require --file.",
       );
+    const privateImport = requiresPrivateDestination(command.id);
     const file = command.file
       ? await importFile(command.file, fileAdapter as FileImportAdapter)
       : undefined;
-    // Every Pod and source request, including checkpoint reads/writes and the import's own
-    // Pod writes, refuses to send once the command is cancelled.
+    // Source requests, login, and non-private imports retain ordinary run cancellation.
     const withSignal =
       (transport: typeof fetch): typeof fetch =>
       async (input, init) => {
         options.signal?.throwIfAborted();
+        const effectiveSignal =
+          init?.signal ?? (input instanceof Request ? input.signal : undefined);
+        const signals = [
+          ...new Set([
+            ...(options.signal ? [options.signal] : []),
+            ...(effectiveSignal ? [effectiveSignal] : []),
+            ...(command.id === "vesync" ? [AbortSignal.timeout(REQUEST_TIMEOUT_MS)] : []),
+          ]),
+        ];
         return transport(input, {
           ...init,
-          signal:
-            options.signal && init?.signal
-              ? AbortSignal.any([options.signal, init.signal])
-              : (options.signal ?? init?.signal),
+          signal: signals.length > 1 ? AbortSignal.any(signals) : signals[0],
         });
       };
-    const podFetch = await createClientCredentialsFetch(
-      config,
-      withSignal(options.podTransport ?? globalThis.fetch),
+    const transport = options.podTransport ?? globalThis.fetch;
+    options.signal?.throwIfAborted();
+    const runTransport = withSignal(transport);
+    let opening = true;
+    const authenticatedFetch = await createClientCredentialsFetch(config, (input, init) =>
+      (privateImport && !opening ? transport : runTransport)(input, init),
     );
-    const stateStore = createStateStore({ ...config, adapterId: command.id, fetch: podFetch });
-    const previous = await stateStore.read();
-    const storage = createSolidBackend({ fetch: podFetch, root: config.podRoot });
+    opening = false;
+    const podFetch =
+      privateImport && options.signal
+        ? abortableFetch(authenticatedFetch, options.signal, true)
+        : authenticatedFetch;
+    const stateStore = createStateStore({
+      ...config,
+      adapterId: command.id,
+      fetch: podFetch,
+      signal: options.signal,
+    });
+    const { verifyPrivateDestination, confirmPrivateWrite } = options;
+    const createStorage =
+      privateImport && (!verifyPrivateDestination || !confirmPrivateWrite)
+        ? createWacImportStorage
+        : createSolidBackend;
+    const storage = createStorage({ fetch: authenticatedFetch, root: config.podRoot });
+    const checkingStorage =
+      podFetch === authenticatedFetch
+        ? storage
+        : createStorage({ fetch: podFetch, root: config.podRoot });
+    const checks = createOwnerOnlyDestinationChecks({
+      podRoot: config.podRoot,
+      ownerWebId: config.webId,
+      signal: options.signal,
+      async openStorage(signal) {
+        const client = signal ? checkingStorage : storage;
+        const root = client.root;
+        const fetch = signal ? podFetch : authenticatedFetch;
+        // ACL links alone are also used by ACP servers. Establish WAC independently.
+        if ((await accessModel({ fetch, storage: root, signal })) !== "wac")
+          throw new PrivateDestinationError(command.id);
+        const head = await client.head(root, { revalidate: true, signal });
+        if (
+          !(head.links.get("type") ?? []).some(
+            ({ target }) => target === "http://www.w3.org/ns/pim/space#Storage",
+          )
+        )
+          throw new PrivateDestinationError(command.id);
+        return client;
+      },
+    });
+    const destinationContext = (url: string, signal?: AbortSignal): DestinationContext => ({
+      url,
+      storage: signal ? checkingStorage : storage,
+      fetch: signal ? podFetch : authenticatedFetch,
+      ownerWebId: config.webId,
+      signal,
+    });
     const podWriter = createStoragePodWriter({
       storage,
       container: adapterContainer(command.id, config.podRoot),
       webId: config.webId,
+      ...(privateImport && {
+        verifyPrivateDestination: verifyPrivateDestination
+          ? (url) => verifyPrivateDestination(destinationContext(url, options.signal))
+          : checks.verifyPrivateDestination,
+        confirmPrivateWrite: confirmPrivateWrite
+          ? (url, version, observeEtag) =>
+              confirmPrivateWrite({ ...destinationContext(url), ...version, observeEtag })
+          : checks.confirmPrivateWrite,
+        cleanupFetch: authenticatedFetch,
+      }),
       typeIndex: {
         profileDocumentUrl: config.profileDocumentUrl,
         storageFor: (url) =>
-          createSolidBackend({ fetch: podFetch, root: `${new URL(url).origin}/` }),
+          createSolidBackend({ fetch: authenticatedFetch, root: `${new URL(url).origin}/` }),
       },
       ...(options.signal && { signal: options.signal }),
     });
+    // Check before the state store writes its ACL, which can create missing ancestors.
+    if (privateImport) await requirePrivateDestination(command.id, podWriter, stateStore.url);
+    let previous = await stateStore.read();
+    const writeState = async (state: CliConnectorState) => {
+      if (privateImport) await requirePrivateDestination(command.id, podWriter, stateStore.url);
+      await stateStore.write(state, privateImport ? podWriter : undefined);
+    };
     let sourceAuth = options.sourceAuth;
+    if (command.id === "vesync" && !sourceAuth) {
+      const credentials = await (options.vesyncCredentials?.() ??
+        readVeSyncCredentials(options.signal));
+      sourceAuth = createVeSyncSourceAuth({
+        credentials,
+        transport: withSignal(options.sourceTransport ?? globalThis.fetch),
+        signal: options.signal,
+        ...(options.sleep && { sleep: options.sleep }),
+        ...(options.random && { random: options.random }),
+      });
+    }
     if (!file && !sourceAuth) {
       if (!adapter?.oauth)
         throw new NodeRuntimeError("auth", "This connector has no source OAuth configuration.");
@@ -208,47 +459,120 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
         adapter.createSourceAuth?.(sourceConfig, token, sourceFetch) ??
         createSourceAuth(command.id, adapter, token, sourceFetch);
     }
-    let next: ConnectorState | undefined;
-    const state = previous && !command.since ? { ...previous, cursor: undefined } : previous;
-    const shared = {
-      podWriter,
-      state,
-      onState: (state: ConnectorState) => {
-        next = state;
-      },
-      ...(options.signal && { signal: options.signal }),
-    };
-    try {
-      if (file) await runFileImport({ ...shared, adapter: fileAdapter as FileImportAdapter, file });
-      else
-        await runImport({
-          ...shared,
-          adapter: adapter as NonNullable<typeof adapter>,
-          mode: "live",
-          sourceAuth,
-        });
-    } catch {
-      if (next) {
-        // A full import still preserves the last successful checkpoint on failure.
-        await stateStore.write(previous ? { ...previous, lastOutcome: "error" } : next);
+    const execute = async () => {
+      let next: ConnectorState | undefined;
+      const slots = cursorSlots(previous);
+      const pendingWhoopBatch = command.id === "whoop" && slots.api?.startsWith('{"v":1,');
+      // File runs always continue their own content-bound batch; API runs resume only with
+      // --since or a pending WHOOP batch. Each path sees only its own cursor slot.
+      const resume = command.since || pendingWhoopBatch;
+      const state = previous && {
+        connectedAt: previous.connectedAt,
+        ...(previous.lastSync === undefined ? {} : { lastSync: previous.lastSync }),
+        cursor: file ? slots.file : resume ? slots.api : undefined,
+        lastOutcome: previous.lastOutcome,
+        counts: previous.counts,
+      };
+      const shared = {
+        podWriter,
+        ...(command.id === "vesync"
+          ? { onProgress: (progress: { label: string }) => stderr(`${progress.label}\n`) }
+          : {}),
+        state,
+        onState: (state: ConnectorState) => {
+          next = state;
+        },
+        ...(options.signal && { signal: options.signal }),
+      };
+      try {
+        const report = file
+          ? await runFileImport({ ...shared, adapter: fileAdapter as FileImportAdapter, file })
+          : await runImport({
+              ...shared,
+              adapter: adapter as NonNullable<typeof adapter>,
+              mode: "live",
+              sourceAuth,
+            });
+        // Warnings are meant to be fixed adapter strings; still never let one carry terminal
+        // control sequences or unbounded text to stderr.
+        for (const warning of report.warnings ?? [])
+          stderr(`${warning.replace(CONTROL_CHARACTERS, "").slice(0, 500)}\n`);
+      } catch (error) {
+        if (command.id === "vesync" && !options.signal?.aborted) {
+          // Classify by cause; a failed checkpoint write only matters if the run was retryable.
+          let failure = classifyVeSyncFailure(error);
+          if (next)
+            try {
+              await stateStore.write(previous ? { ...previous, lastOutcome: "error" } : next);
+            } catch (stateError) {
+              if (failure.retry) failure = classifyVeSyncFailure(stateError);
+            }
+          throw failure;
+        }
+        if (error instanceof PrivateDestinationError) throw error;
+        if (next) {
+          // A full import still preserves the last successful checkpoint on failure.
+          await writeState(previous ? { ...previous, lastOutcome: "error" } : next);
+        }
+        if (error instanceof VeSyncAuthError) throw new NodeRuntimeError("auth", error.message);
+        throw new NodeRuntimeError(
+          "import",
+          "Import failed; the last successful checkpoint was retained.",
+        );
       }
-      throw new NodeRuntimeError(
-        "import",
-        "Import failed; the last successful checkpoint was retained.",
+      if (!next) throw new NodeRuntimeError("import", "Import did not return connector state.");
+      const { cursor, ...rest } = next;
+      const api = file ? slots.api : cursor;
+      const fileCursor = file ? cursor : slots.file;
+      await writeState({
+        ...rest,
+        ...(api === undefined ? {} : { cursor: api }),
+        ...(fileCursor === undefined ? {} : { fileCursor }),
+      });
+      stdout(
+        `Imported ${command.id}: ${next.counts.documents} documents, ${next.counts.items} items, ${next.counts.skipped} skipped.\n`,
       );
-    }
-    if (!next) throw new NodeRuntimeError("import", "Import did not return connector state.");
-    await stateStore.write(next);
-    stdout(
-      `Imported ${command.id}: ${next.counts.documents} documents, ${next.counts.items} items, ${next.counts.skipped} skipped.\n`,
-    );
+    };
+    if (command.watch !== undefined) {
+      let first = true;
+      await watchImports({
+        minutes: command.watch,
+        signal: options.signal,
+        run: async () => {
+          try {
+            if (!first) previous = await stateStore.read();
+            first = false;
+            await execute();
+          } catch (error) {
+            // State rereads and checkpoint writes are classified like import failures.
+            throw options.signal?.aborted ? error : classifyVeSyncFailure(error);
+          }
+        },
+        retry: (error) => error instanceof VeSyncRunFailure && error.retry,
+        onError: (error) =>
+          stderr(
+            `${error instanceof NodeRuntimeError ? error.message : "Import failed."} Retrying with backoff.\n`,
+          ),
+        ...(options.sleep && { sleep: options.sleep }),
+        ...(options.random && { random: options.random }),
+      });
+    } else await execute();
     return EXIT_CODES.success;
   } catch (error) {
+    if (error instanceof PrivateDestinationError && error.phase === "after-write") {
+      stderr(`${error.message} ${error.url}\n`);
+      return EXIT_CODES.import;
+    }
     const failure = options.signal?.aborted
       ? new NodeRuntimeError("cancelled", "Import cancelled.")
-      : error instanceof NodeRuntimeError
-        ? error
-        : new NodeRuntimeError("import", "Import failed.");
+      : error instanceof VeSyncAuthError
+        ? new NodeRuntimeError("auth", error.message)
+        : error instanceof NodeRuntimeError
+          ? error
+          : new NodeRuntimeError(
+              "import",
+              error instanceof PrivateDestinationError ? error.message : "Import failed.",
+            );
     stderr(`${failure.message}\n`);
     return EXIT_CODES[failure.kind];
   }

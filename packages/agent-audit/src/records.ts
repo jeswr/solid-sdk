@@ -17,6 +17,7 @@ const LEGACY_ENTRY_KINDS = [
   "tool-call",
   "tamper-suspected",
   "conversation",
+  "personal-data-read",
 ] as const;
 export const ENTRY_KINDS = [...LEGACY_ENTRY_KINDS, "gate-decision", "record-anchor"] as const;
 const iri = z
@@ -48,39 +49,53 @@ export const termsSchema = z.strictObject({
   /** Commits the executor's full intent, carrier, preview and expiry without exposing them. */
   proposalDigest: digestSchema.optional(),
 });
-const recordSchema = z.strictObject({
-  type: z.enum(LEGACY_ENTRY_KINDS),
-  id: iri,
-  agent: iri,
-  owner: iri,
-  taskId: taskIdSchema.optional(),
-  conversation: iri.optional(),
-  proposal: iri.optional(),
-  mandate: iri.optional(),
-  approval: iri.optional(),
-  decisionRecord: iri.optional(),
-  transmission: iri.optional(),
-  receipt: iri.optional(),
-  terms: termsSchema.optional(),
-  termsDigest: digestSchema.optional(),
-  messageDigest: digestSchema.optional(),
-  decision: z.enum(["permit", "confirm-required", "prohibited", "refuse-all"]).optional(),
-  status: z.enum(["attempting", "sent", "not-sent", "uncertain", "refused"]).optional(),
-  reason: label.optional(),
-  accountId: label.optional(),
-  recipientHashes: z.array(recipientHashSchema).max(100).optional(),
-  context: z.enum(["reader", "proposer"]).optional(),
-  provider: z.enum(["openai", "anthropic"]).optional(),
-  model: label.optional(),
-  modelCall: iri.optional(),
-  tool: instrumentationLabel.optional(),
-  tokens: count.optional(),
-  inputTokens: count.optional(),
-  outputTokens: count.optional(),
-  toolCalls: count.optional(),
-  latencyMs: count.optional(),
-  retries: count.optional(),
-});
+const recordSchema = z
+  .strictObject({
+    type: z.enum(LEGACY_ENTRY_KINDS),
+    id: iri,
+    agent: iri,
+    owner: iri,
+    taskId: taskIdSchema.optional(),
+    conversation: iri.optional(),
+    proposal: iri.optional(),
+    mandate: iri.optional(),
+    approval: iri.optional(),
+    decisionRecord: iri.optional(),
+    transmission: iri.optional(),
+    receipt: iri.optional(),
+    terms: termsSchema.optional(),
+    termsDigest: digestSchema.optional(),
+    messageDigest: digestSchema.optional(),
+    decision: z.enum(["permit", "confirm-required", "prohibited", "refuse-all"]).optional(),
+    status: z.enum(["attempting", "sent", "not-sent", "uncertain", "refused"]).optional(),
+    reason: label.optional(),
+    purpose: iri.optional(),
+    categories: z.array(iri).min(1).max(64).optional(),
+    resources: z.array(iri).max(100).optional(),
+    accountId: label.optional(),
+    recipientHashes: z.array(recipientHashSchema).max(100).optional(),
+    context: z.enum(["reader", "proposer"]).optional(),
+    provider: z.enum(["openai", "anthropic"]).optional(),
+    model: label.optional(),
+    modelCall: iri.optional(),
+    tool: instrumentationLabel.optional(),
+    tokens: count.optional(),
+    inputTokens: count.optional(),
+    outputTokens: count.optional(),
+    toolCalls: count.optional(),
+    latencyMs: count.optional(),
+    retries: count.optional(),
+  })
+  .superRefine((record, context) => {
+    const fields =
+      record.type === "personal-data-read"
+        ? (["tool", "decision", "reason", "categories", "resources"] as const)
+        : (["purpose", "categories", "resources"] as const);
+    for (const field of fields) {
+      if ((record[field] !== undefined) !== (record.type === "personal-data-read"))
+        context.addIssue({ code: "custom", path: [field], message: "Invalid audit record fields" });
+    }
+  });
 const identityFields = { id: iri, agent: iri, owner: iri };
 const linkedDigest = digestSchema.length(72);
 /** Body-free reference and daemon verdict codes admitted to gate decisions. */

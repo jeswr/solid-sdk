@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Adapter contracts and host ports. */
 
 /** Shared source-run limits and typed partial-run budget failures. */
@@ -11,8 +12,18 @@ export * from "./core/file-import.js";
 export * from "./core/import-runner.js";
 /** Fetch-backed Pod writer factory. */
 export * from "./core/pod-writer.js";
+export {
+  createOwnerOnlyDestinationChecks,
+  createOwnerOnlyDestinationVerifier,
+  createSessionPrivateDestinationChecks,
+  createSessionPrivateDestinationVerifier,
+} from "./core/private-destination.js";
 /** Conditional storage-client-backed Pod writer. */
-export { createStoragePodWriter, type StoragePodWriterOptions } from "./core/storage-pod-writer.js";
+export {
+  createStoragePodWriter,
+  createWacImportStorage,
+  type StoragePodWriterOptions,
+} from "./core/storage-pod-writer.js";
 export * from "./core/types.js";
 /** File adapter registry. */
 export * from "./file-adapters.js";

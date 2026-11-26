@@ -50,6 +50,7 @@ function fixture() {
     restore: async () => current,
     identity: async () => current,
     remembered: async () => [],
+    retireIfOwnedBy: async () => ({ retired: false, reason: "no-grant" }),
     logout: async () => emit("logout", null),
     on: (type, handler) => {
       const listeners = handlers.get(type) ?? new Set();

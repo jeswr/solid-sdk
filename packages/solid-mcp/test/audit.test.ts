@@ -181,6 +181,17 @@ it("does not treat an unreadable monthly log as absent", async () => {
   expect(write.mock.calls.some(([target]) => target === url())).toBe(false);
 });
 
+it("refuses a monthly audit ACL served with an unsupported media type", async () => {
+  const pod = fixture();
+  const acl = memoryAclUrl(ROOT, url());
+  const existing = encoder.encode("Existing ACL with unsupported media type");
+  await pod.write(acl, existing, "text/plain", {});
+  const write = vi.spyOn(pod, "write");
+  await expect(audit(pod)).rejects.toThrow("Audit protection unavailable");
+  expect(write.mock.calls.some(([target]) => target === acl || target === url())).toBe(false);
+  expect((await pod.read(acl)).body).toEqual(existing);
+});
+
 it("verifies that a successful write actually persisted the activity", async () => {
   const pod = fixture();
   const write = pod.write;

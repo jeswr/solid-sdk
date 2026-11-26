@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
- * The integrations registry — every app in docs/integrations-catalog.md, all
- * 32 visible, each with its honest status:
+ * The integrations registry — every app in docs/integrations-catalog.md,
+ * each with its honest status:
  *
  * - Tier A + client id (+ proxy where the platform demands one) → **live**
  * - Tier A unconfigured → **demo** (full UX against recorded fixtures)
- * - Tier B → **approval-needed** (platform review gates any user connect)
+ * - Tier B → **approval-needed** (platform review gates any user connect), or **cli-only**
  * - Tier C → **export-file** (no user-grade API; imports the user's official export file)
  *
  * Hosts inject public OAuth configuration through createRegistry().
@@ -33,6 +34,8 @@ import { spotifyAdapter } from "./spotify/adapter.js";
 import { stravaAdapter } from "./strava/adapter.js";
 import { tiktokAdapter } from "./tiktok/adapter.js";
 import { twitchAdapter } from "./twitch/adapter.js";
+import { vesyncAdapter } from "./vesync/adapter.js";
+import { whoopAdapter } from "./whoop/adapter.js";
 import { xTwitterAdapter } from "./x-twitter/adapter.js";
 import { youtubeAdapter } from "./youtube/adapter.js";
 
@@ -45,9 +48,9 @@ export interface CatalogEntry extends IntegrationMetadata {
 }
 
 /** What the UI may render for an entry right now. */
-export type IntegrationStatus = "live" | "demo" | "approval-needed" | "export-file";
+export type IntegrationStatus = "live" | "demo" | "approval-needed" | "export-file" | "cli-only";
 
-/** The 8 Tier-A adapters (docs/integrations-catalog.md). */
+/** The 9 Tier-A adapters, including WHOOP's OAuth/file hybrid. */
 export const ADAPTERS: readonly IntegrationAdapter[] = [
   spotifyAdapter,
   githubAdapter,
@@ -57,10 +60,11 @@ export const ADAPTERS: readonly IntegrationAdapter[] = [
   twitchAdapter,
   notionAdapter,
   dropboxAdapter,
+  whoopAdapter,
 ];
 
 /**
- * The 14 Tier-B adapters — real OAuth APIs with working fixture-backed
+ * The 15 approval-gated Tier-B adapters — real OAuth APIs with working fixture-backed
  * imports, but platform app-review gates any **live** user connect. They are
  * full {@link IntegrationAdapter}s (so the demo import is real), yet
  * {@link statusOf} keeps them `"approval-needed"`: even with a client id, the
@@ -84,8 +88,12 @@ export const TIER_B_ADAPTERS: readonly IntegrationAdapter[] = [
   pinterestAdapter,
 ];
 
-/** Every adapter the app can run an import for (Tier A live/demo + Tier B demo). */
-export const ALL_ADAPTERS: readonly IntegrationAdapter[] = [...ADAPTERS, ...TIER_B_ADAPTERS];
+/** All adapters, including the Node-only VeSync account adapter. */
+export const ALL_ADAPTERS: readonly IntegrationAdapter[] = [
+  ...ADAPTERS,
+  ...TIER_B_ADAPTERS,
+  vesyncAdapter,
+];
 
 const byId = new Map(ALL_ADAPTERS.map((a) => [a.metadata.id, a]));
 
@@ -105,6 +113,7 @@ export function isLive(adapter: IntegrationAdapter): boolean {
 }
 
 export function statusOf(entry: CatalogEntry): IntegrationStatus {
+  if (entry.cliOnly) return "cli-only";
   if (entry.tier === "B") return "approval-needed";
   if (entry.tier === "C") return "export-file";
   const adapter = byId.get(entry.id);
@@ -196,8 +205,8 @@ export const TIER_C: readonly CatalogEntry[] = [
     "bank-statements",
     "Bank statements",
     ["finance"],
-    "Transactions into Finance.",
-    "CSV / OFX statements",
+    "Revolut, HSBC UK, Monzo and Starling CSV or OFX/QFX transactions into Finance; HSBC requires explicit format selection and an account label.",
+    "Bank CSV / OFX statements",
   ),
   C(
     "google-takeout",
@@ -208,9 +217,16 @@ export const TIER_C: readonly CatalogEntry[] = [
   ),
 ];
 
-/** All 32 catalog entries, A → B → C, in display order. */
+/** All catalog entries, A → B → C, in display order. */
 export function allCatalogEntries(): CatalogEntry[] {
-  return [...ADAPTERS.map((a) => ({ ...a.metadata })), ...TIER_B, ...TIER_C];
+  return [...ADAPTERS.map(catalogEntry), ...TIER_B, { ...vesyncAdapter.metadata }, ...TIER_C];
+}
+
+function catalogEntry(adapter: IntegrationAdapter): CatalogEntry {
+  return {
+    ...adapter.metadata,
+    ...(adapter.metadata.id === "spotify" ? { exportFormat: "Streaming history ZIP / JSON" } : {}),
+  };
 }
 
 /** Public per-source configuration supplied by the host. Tokens stay in SourceAuth. */
@@ -238,18 +254,22 @@ export function createRegistry(config: ConnectorConfigs = {}) {
   });
   const byId = new Map(configured.map((adapter) => [adapter.metadata.id, adapter]));
   const tierA = configured.filter((adapter) => adapter.metadata.tier === "A");
-  const tierB = configured.filter((adapter) => adapter.metadata.tier === "B");
+  const tierB = configured.filter(
+    (adapter) => adapter.metadata.tier === "B" && !adapter.metadata.cliOnly,
+  );
   return {
     ADAPTERS: tierA,
     TIER_B_ADAPTERS: tierB,
     ALL_ADAPTERS: configured,
     adapterById: (id: string) => byId.get(id),
     allCatalogEntries: (): CatalogEntry[] => [
-      ...tierA.map((a) => ({ ...a.metadata })),
+      ...tierA.map(catalogEntry),
       ...TIER_B,
+      { ...vesyncAdapter.metadata },
       ...TIER_C,
     ],
     statusOf: (entry: CatalogEntry): IntegrationStatus => {
+      if (entry.cliOnly) return "cli-only";
       if (entry.tier === "B") return "approval-needed";
       if (entry.tier === "C") return "export-file";
       const adapter = byId.get(entry.id);

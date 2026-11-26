@@ -65,6 +65,33 @@ export class IntegrationSyncError extends IntegrationError {
   }
 }
 
+export class PrivateDestinationError extends IntegrationSyncError {
+  readonly phase: "before-write" | "after-write";
+  readonly removed?: boolean;
+
+  constructor(adapterId: string, written?: { url: string; removed: boolean }) {
+    super(
+      adapterId,
+      written
+        ? `A file was written to your pod and may be visible to other people. ${written.removed ? "The file was removed." : "Removal of the file could not be confirmed."}`
+        : "Could not verify an owner-private import destination.",
+      written,
+    );
+    this.name = "PrivateDestinationError";
+    this.phase = written ? "after-write" : "before-write";
+    this.removed = written?.removed;
+  }
+}
+
+// AUTHORED-BY Claude Opus 5.5
+/** The Pod cannot support a safe conditional update (no strong ETag); retrying cannot help. */
+export class PreconditionUnsupportedError extends IntegrationSyncError {
+  constructor(adapterId: string, message: string) {
+    super(adapterId, message);
+    this.name = "PreconditionUnsupportedError";
+  }
+}
+
 /** The platform rate-limited us (HTTP 429). Retry after the given delay. */
 export class RateLimitedError extends IntegrationSyncError {
   /** Parsed `Retry-After`, in seconds, when the platform sent one. */

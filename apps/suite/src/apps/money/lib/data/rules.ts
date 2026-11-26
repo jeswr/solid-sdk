@@ -1,6 +1,8 @@
 // AUTHORED-BY Claude Opus 5.5
+
+import { type Category, putTransaction, type Transaction } from "@jeswr/solid-money";
 import { type CategoryRule, categoriseTransactions } from "../import";
-import { type Category, MoneyIoError, putTransaction, type Transaction } from "../model";
+import { MoneyIoError } from "../model";
 import { type MoneyClient, storeOf } from "./container";
 import { allTransactions, categorised } from "./ledger";
 import { reconcileMutation } from "./mutations";

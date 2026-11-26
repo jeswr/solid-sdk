@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
+import type { Range, Transaction } from "@jeswr/solid-money";
 import {
   Button,
   DataTable,
@@ -15,7 +16,6 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { renameAccount } from "../lib/data/accounts";
 import { bulkCategorise, categorised, deleteTransaction } from "../lib/data/ledger";
-import type { Range, Transaction } from "../lib/model";
 import { useMoney, useTransactions } from "../state/money-context";
 import {
   Amount,

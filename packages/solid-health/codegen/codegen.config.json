@@ -1,0 +1,81 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "shapesBase": "https://jeswr.org/ns/sectors/health/import-shapes#",
+  "prefixes": {
+    "health": "https://jeswr.org/ns/sectors/health#",
+    "core": "https://jeswr.org/ns/core#",
+    "time": "http://www.w3.org/2006/time#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "dct": "http://purl.org/dc/terms/",
+    "unit": "http://qudt.org/vocab/unit/"
+  },
+  "entities": [
+    {
+      "name": "Observation",
+      "kind": "composite",
+      "root": "observation",
+      "nodes": {
+        "observation": {
+          "targetClass": "https://jeswr.org/ns/sectors/health#Observation",
+          "fragment": "it",
+          "fields": {
+            "measuredValue": {},
+            "unit": {},
+            "unitCode": {},
+            "name": {},
+            "description": {},
+            "source": {}
+          },
+          "links": {
+            "code": "code",
+            "patient": "patient",
+            "time": "instant"
+          }
+        },
+        "code": {
+          "targetClass": "https://jeswr.org/ns/sectors/health#CodeableConcept",
+          "fragment": "code",
+          "fields": {
+            "codeValue": {},
+            "display": {},
+            "scheme": {}
+          }
+        },
+        "instant": {
+          "targetClass": "http://www.w3.org/2006/time#Instant",
+          "fragment": "time",
+          "fields": {
+            "dateTime": {}
+          }
+        },
+        "patient": {
+          "targetClass": "https://jeswr.org/ns/core#Person",
+          "fragment": "subject",
+          "fields": {}
+        }
+      }
+    },
+    {
+      "name": "HeartRate",
+      "targetClass": "https://jeswr.org/ns/sectors/health#HeartRateObservation",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "name": "Steps",
+      "targetClass": "https://jeswr.org/ns/sectors/health#StepCountObservation",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "name": "Sleep",
+      "targetClass": "https://jeswr.org/ns/sectors/health#SleepObservation",
+      "subject": {
+        "convention": "self"
+      }
+    }
+  ]
+}

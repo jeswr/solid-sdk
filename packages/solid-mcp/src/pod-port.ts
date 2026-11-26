@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { isContainerUrl } from "@jeswr/guarded-fetch";
 import { ContainerDataset } from "@solid/object";
@@ -39,10 +40,16 @@ export interface PodReadOptions {
 
 /** Server metadata for an exact resource, including a not-yet-created resource. */
 export interface PodHeadResult {
-  /** Absolute WAC ACL URL from a unique, unanchored server Link relation. */
+  /** Absolute WAC ACL URL from a unique, unanchored server Link relation, absent on ACP. */
   acl?: string;
+  /** Absolute targets of unanchored ACP access-control Links. */
+  acr?: string[];
   /** Absolute targets of every unanchored server `rel="describedby"` Link. */
   describedby?: string[];
+  /** Complete absolute ACL, ACP access-control, describedby and linkset links; absent means unknown. */
+  auxiliaryResources?: readonly string[];
+  /** Whether the exact target exists (false on HTTP 404). */
+  exists?: boolean;
 }
 
 /** Raw resource bytes, media type and optional ETag. */
@@ -144,8 +151,15 @@ export function podSearchLimits(source: PodSource): SolidMcpConfig["searchLimits
 
 /** Fetch-backed PodPort, preserving the existing pod scope and configured-identity exception. */
 export function createFetchPodPort(input: SolidMcpConfig): PodPort {
+  return createFetchPodPortWithHead(input);
+}
+
+/** @internal The built-in fetch adapter always supplies HEAD discovery. */
+export function createFetchPodPortWithHead(
+  input: SolidMcpConfig,
+): PodPort & Required<Pick<PodPort, "head">> {
   const config = { ...input, podRoot: normalizePodRoot(input.podRoot) };
-  const pod: PodPort = {
+  const pod: ReturnType<typeof createFetchPodPortWithHead> = {
     root: config.podRoot,
     webId: config.webId ?? "",
     async head(url) {
@@ -157,13 +171,13 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       });
       void response.body?.cancel().catch(() => {});
       if ((!response.ok && response.status !== 404) || (response.url && response.url !== target))
-        throw new Error("WAC ACL discovery failed");
-      const links = auxiliaryLinks(response.headers.get("link") ?? "");
+        throw Object.assign(new Error("WAC ACL discovery failed"), { status: response.status });
+      const header = response.headers.get("link") ?? "";
+      // Preserve strict governing-association discovery as well as the complete link set.
+      // Never turn malformed, ambiguous or unsupported metadata into an empty success.
       return {
-        ...(links.acl ? { acl: new URL(links.acl, target).href } : {}),
-        ...(links.describedby
-          ? { describedby: links.describedby.map((url) => new URL(url, target).href) }
-          : {}),
+        ...auxiliaryLinks(header, target),
+        exists: response.status !== 404,
       };
     },
     async read(url, options: PodReadOptions = {}) {

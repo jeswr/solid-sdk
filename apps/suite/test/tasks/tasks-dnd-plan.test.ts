@@ -617,7 +617,7 @@ describe("announcements", () => {
   const views: TaskView[] = [task, other];
 
   it("names projects and sections, defaulting to No section", () => {
-    expect(projectNames([home])).toEqual([{ url: P, title: "Home", sections: [] }]);
+    expect(projectNames([home])).toEqual([{ url: P, title: "Home", sections: [], labels: [] }]);
     expect(
       projectNames([{ url: P, tracker: { title: undefined, sections: [] } } as never]),
     ).toEqual([{ url: P, title: "", sections: [] }]);

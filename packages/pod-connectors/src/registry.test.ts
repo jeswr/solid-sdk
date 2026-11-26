@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { FILE_ADAPTERS, fileAdapterById } from "./file-adapters.js";
 import {
@@ -13,15 +14,15 @@ import {
 } from "./registry.js";
 
 describe("integrations registry", () => {
-  it("exposes exactly 33 catalog entries with unique, URL-safe ids", () => {
+  it("exposes exactly 35 catalog entries with unique, URL-safe ids", () => {
     const entries = allCatalogEntries();
-    expect(entries).toHaveLength(33);
+    expect(entries).toHaveLength(35);
     const ids = entries.map((e) => e.id);
-    expect(new Set(ids).size).toBe(33);
+    expect(new Set(ids).size).toBe(35);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9-]+$/);
   });
 
-  it("ships the 8 Tier-A adapters from the catalog", () => {
+  it("ships the 9 Tier-A adapters from the catalog", () => {
     expect(ADAPTERS.map((a) => a.metadata.id).sort()).toEqual([
       "discord",
       "dropbox",
@@ -31,6 +32,7 @@ describe("integrations registry", () => {
       "spotify",
       "strava",
       "twitch",
+      "whoop",
     ]);
     for (const a of ADAPTERS) {
       expect(a.metadata.tier).toBe("A");
@@ -42,7 +44,7 @@ describe("integrations registry", () => {
     }
   });
 
-  it("ships the 14 Tier-B adapters, each demoable now with an honest blocker", () => {
+  it("ships the 15 Tier-B adapters, each demoable now with an honest blocker", () => {
     expect(TIER_B_ADAPTERS.map((a) => a.metadata.id).sort()).toEqual([
       "facebook",
       "fitbit",
@@ -98,15 +100,15 @@ describe("integrations registry", () => {
     for (const entry of allCatalogEntries()) {
       const status = statusOf(entry);
       if (entry.tier === "A") expect(status).toBe("demo");
-      if (entry.tier === "B") expect(status).toBe("approval-needed");
+      if (entry.tier === "B" && !entry.cliOnly) expect(status).toBe("approval-needed");
       if (entry.tier === "C") expect(status).toBe("export-file");
     }
     for (const a of ADAPTERS) expect(isLive(a)).toBe(false);
   });
 
   it("ships a working file-import adapter for every Tier-C catalog entry", () => {
-    // All 10 Tier-C entries plus the Tier-B hybrid (Garmin, asserted below).
-    expect(FILE_ADAPTERS).toHaveLength(TIER_C.length + 1);
+    // All 10 Tier-C entries plus Spotify, Garmin and WHOOP hybrids.
+    expect(FILE_ADAPTERS).toHaveLength(TIER_C.length + 3);
     for (const entry of TIER_C) {
       const adapter = fileAdapterById(entry.id);
       expect(adapter, `missing file adapter for ${entry.id}`).toBeDefined();
@@ -131,6 +133,8 @@ describe("integrations registry", () => {
     expect(file?.accept).toContain(".csv");
     expect(file?.accept).toContain(".gpx");
     expect(file?.accept).toContain(".tcx");
+    expect(file?.accept).toContain(".zip");
+    expect(file?.streaming).toBe(true);
     // Honest guidance: both export options plus the full-archive alternative.
     expect(file?.fileHint).toMatch(/Export CSV/);
     expect(file?.fileHint).toMatch(/GPX or TCX/);
@@ -149,11 +153,12 @@ describe("integrations registry", () => {
       goodreads: "https://www.goodreads.com/review/import",
       steam: "https://help.steampowered.com/en/accountdata",
       chatgpt: "https://chatgpt.com",
-      garmin: "https://connect.garmin.com/modern/activities",
+      garmin: "https://www.garmin.com/account/datamanagement/",
+      spotify: "https://www.spotify.com/account/privacy/",
     };
     // In-app or institution-specific exports: no URL to send the user to —
     // the field must be ABSENT (the UI renders no link).
-    const NoExportUrl = ["apple-health", "whatsapp", "bank-statements"];
+    const NoExportUrl = ["apple-health", "whatsapp", "bank-statements", "whoop"];
 
     for (const a of FILE_ADAPTERS) {
       const expected = ExportUrls[a.metadata.id];
@@ -204,6 +209,24 @@ describe("injected public configuration", () => {
     expect(first.statusOf(TIER_C[0]!)).toBe("export-file");
     expect(first.statusOf({ ...ADAPTERS[0]!.metadata, id: "unknown" })).toBe("demo");
     expect(first.adapterById("unknown")).toBeUndefined();
-    expect(first.allCatalogEntries()).toHaveLength(33);
+    expect(first.allCatalogEntries()).toHaveLength(35);
   });
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+it("advertises VeSync as CLI only, independently of OAuth configuration", async () => {
+  const { createRegistry } = await import("./registry.js");
+  for (const registry of [createRegistry(), createRegistry({ vesync: { clientId: "ignored" } })]) {
+    const entry = registry.allCatalogEntries().find(({ id }) => id === "vesync");
+    if (!entry) throw new Error("Missing VeSync catalogue entry.");
+    expect(entry).toMatchObject({
+      name: "Levoit (VeSync)",
+      cliOnly: true,
+      authKind: "account-cli",
+    });
+    expect(registry.statusOf(entry)).toBe("cli-only");
+    expect(statusOf(entry)).toBe("cli-only");
+    expect(entry.requirements.join(" ")).toContain("pod-connectors import vesync");
+    expect(registry.adapterById("vesync")?.oauth).toBeUndefined();
+  }
 });
