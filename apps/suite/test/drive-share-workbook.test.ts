@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Claude Opus 5.5
 // Drive's Share on a Sheets workbook never opens the per-scope editor (Int9 review F12).
 import { Fragment } from "react";
@@ -50,11 +51,15 @@ it("opens Drive's Share on a workbook without the per-scope editor", async () =>
     reset: vi.fn(),
   };
   await mount(h(DriveProvider, { session, children: h(DriveUiProvider, null, h(Dialogs)) }));
-  const folder = { url: `${PRIVATE}drop/`, name: "drop" } as DriveItem;
-  const workbook = { url: `${PRIVATE}sheets/budget/`, name: "Budget", workbook: true } as DriveItem;
-  await act(async () => ui.openDialog({ kind: "share", item: folder }));
-  await act(async () => ui.closeDialog());
-  await act(async () => ui.openDialog({ kind: "share", item: workbook }));
-  expect(shown.find((s) => s.url === folder.url)?.scopedEditor).toBe(true);
-  expect(shown.find((s) => s.url === workbook.url)?.scopedEditor).toBe(false);
+  const folder: DriveItem = { kind: "folder", url: `${PRIVATE}drop/`, name: "drop" };
+  const items: [DriveItem, boolean][] = [
+    [folder, true],
+    [{ ...folder, url: `${PRIVATE}sheets/budget/`, workbook: true }, false],
+    [{ ...folder, url: `${PRIVATE}sheets/unread/`, workbookUnknown: true }, false],
+  ];
+  for (const [item, scopedEditor] of items) {
+    await act(async () => ui.openDialog({ kind: "share", item }));
+    expect(shown.at(-1)).toEqual({ url: item.url, scopedEditor });
+    await act(async () => ui.closeDialog());
+  }
 });

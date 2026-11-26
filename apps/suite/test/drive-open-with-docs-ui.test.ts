@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { FileText } from "lucide-react";
@@ -180,7 +181,7 @@ describe("useOpenWithDocs", () => {
     expect(mocks.router.push).toHaveBeenCalledWith(docsHref(`${ROOT}docs/report.ttl`));
   });
 
-  it("navigates after a menu is dismissed during conversion", async () => {
+  it("dismisses progress without navigating after the controller unmounts during conversion", async () => {
     const result = deferred<{ url: string; skipped: [] }>();
     mocks.convert.mockReturnValue(result.promise);
     const view = await mount(h(Hook, { item: NOTES }));
@@ -192,7 +193,10 @@ describe("useOpenWithDocs", () => {
     await view.unmount();
     result.resolve({ url: `${ROOT}docs/notes.ttl`, skipped: [] });
     await pending;
-    expect(mocks.router.push).toHaveBeenCalledWith(docsHref(`${ROOT}docs/notes.ttl`));
+    expect(mocks.toast.dismiss).toHaveBeenCalledWith("loading-id");
+    expect(mocks.toast.success).not.toHaveBeenCalled();
+    expect(mocks.router.push).not.toHaveBeenCalled();
+    expect(invalidate).not.toHaveBeenCalled();
   });
 
   it.each([

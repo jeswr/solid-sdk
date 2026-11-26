@@ -50,8 +50,11 @@ export interface AccountsContextValue {
   status: SessionStatus;
   active: SuiteAccount | null;
   accounts: SuiteAccount[];
-  /** Checks the live session, including changes React has not committed yet. */
-  isActiveAccount(id: string, sessionVersion?: number): boolean;
+  /** Check the live account by shell ID or by WebID and storage, even before React commits. */
+  isActiveAccount(
+    account: string | Pick<SuiteAccount, "webId" | "storageUrl">,
+    sessionVersion?: number,
+  ): boolean;
   isSignedInAccount?(id: string): boolean;
   /** Account-bound fetch; optional only for older preview adapters. */
   fetchFor?(account: SuiteAccount, options?: FetchForOptions): typeof fetch;
@@ -93,11 +96,19 @@ export function AccountsProvider({
   const signInAttempt = useRef(0);
   const sessionVersion = useRef(0);
   const isActiveAccount = useCallback(
-    (id: string, expected?: number) =>
-      current.current.activeId === id &&
-      currentStatus.current === "ready" &&
-      !retiring.current.has(id) &&
-      (expected === undefined || expected === sessionVersion.current),
+    (account: string | Pick<SuiteAccount, "webId" | "storageUrl">, expected?: number) => {
+      const { activeId, accounts } = current.current;
+      if (
+        !activeId ||
+        currentStatus.current !== "ready" ||
+        retiring.current.has(activeId) ||
+        (expected !== undefined && expected !== sessionVersion.current)
+      )
+        return false;
+      if (typeof account === "string") return activeId === account;
+      const active = accounts.find((candidate) => candidate.id === activeId);
+      return active?.webId === account.webId && active.storageUrl === account.storageUrl;
+    },
     [],
   );
   const changeStatus = useCallback((value: SessionStatus) => {

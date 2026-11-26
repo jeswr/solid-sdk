@@ -16,6 +16,7 @@ import { useOptionalAccounts } from "@/shell/session/accounts-context";
 import { ReauthDialog } from "@/shell/session/reauth-dialog";
 import { nativeShareIntake, type ShareIntake } from "@/shell/share/intake";
 import { nameOf, parentOf } from "../lib/client/client";
+import { isWorkbookLike } from "../lib/client/workbook";
 import { DriveProvider, useDrive, useFolder } from "../state/drive-context";
 import { createShareActions } from "../state/share-actions";
 import type { UploadQueue } from "../state/uploads";
@@ -254,7 +255,8 @@ function DriveShareBatch({
           {listing.status === "ready" ? (
             listing.items
               .filter(
-                (item) => item.kind === "folder" && !item.workbook && !item.name.startsWith("."),
+                (item) =>
+                  item.kind === "folder" && !isWorkbookLike(item) && !item.name.startsWith("."),
               )
               .map((item) => (
                 <Button variant="outline" key={item.url} onClick={() => setChosen(item.url)}>

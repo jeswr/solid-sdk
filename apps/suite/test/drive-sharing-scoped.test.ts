@@ -1,7 +1,9 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Claude Opus 5.5
 // Drive's scope-aware sharing (sst-uo4.4) through the SDK role layer against the demo pod.
 import { serialize } from "@jeswr/rdf-serialize";
 import { expect, it, vi } from "vitest";
+import { matchPlan } from "../src/apps/drive/components/share-scoped";
 import {
   applyScopedSharing,
   isPartialScope,
@@ -159,14 +161,31 @@ it("fails closed when one scope grants access its roles would drop", async () =>
   await expect(loadScopedSharing(env.session, FOLDER)).rejects.toThrow(UNMAPPED);
 });
 
-it("marks a folder whose items inside its owner doesn't own", async () => {
+it("applies the folder owner's match plan while preserving the other owner of the items inside", async () => {
   const env = await setup(ALICE, (doc) => {
     authorization(doc, ALICE, ["Read", "Write", "Control"]);
+    group(authorization(doc, TEAM, ["Read"]));
     inside(doc, BOB, ["Read", "Write", "Control"]);
   });
   const scoped = await loadScopedSharing(env.session, FOLDER);
   expect(scoped.canManage).toBe(true);
   expect(scoped.ownsContents).toBe(false);
+  expect(scoped.groups.contents).toEqual([]);
+
+  const plan = matchPlan(scoped, "folder", ALICE);
+  const { changed } = await applyScopedSharing(env.session, scoped, plan.selection);
+  expect(changed).toBe(true);
+  const saved = await loadScopedSharing(env.session, FOLDER);
+  expect(roles(saved.folder)).toEqual([[[ALICE, "owner"]], "none"]);
+  expect(roles(saved.contents)).toEqual([
+    [
+      [ALICE, "owner"],
+      [BOB, "owner"],
+    ],
+    "none",
+  ]);
+  expect(saved.groups.folder).toMatchObject([{ id: TEAM, role: "viewer" }]);
+  expect(saved.groups.contents).toEqual(saved.groups.folder);
 });
 
 it("refuses a stale save, and a save by someone who can't manage the folder", async () => {
@@ -277,6 +296,46 @@ function group(rule: ReturnType<typeof authorization>, id = TEAM) {
   properties(rule).values(`${ACL}agent`).clear();
   properties(rule).values(`${ACL}agentGroup`).add(id);
 }
+
+it("preserves an unchanged URN group while applying a match", async () => {
+  const id = "urn:group:team";
+  const env = await setup(ALICE, (doc) => {
+    authorization(doc, ALICE, ["Read", "Write", "Control"]).default = FOLDER;
+    const rule = authorization(doc, id, ["Read"]);
+    rule.default = FOLDER;
+    group(rule, id);
+    inside(doc, CAROL, ["Read"]);
+  });
+  const scoped = await loadScopedSharing(env.session, FOLDER);
+  const { selection } = matchPlan(scoped, "contents", ALICE);
+  const { changed, snapshot } = await applyScopedSharing(env.session, scoped, selection);
+  expect(changed).toBe(true);
+  expect(snapshot.folder.people).toEqual(snapshot.contents.people);
+  expect(snapshot.folder.people).toContainEqual(
+    expect.objectContaining({ webId: CAROL, role: "viewer" }),
+  );
+  expect(snapshot.groups).toEqual(scoped.groups);
+  expect(snapshot.groups.folder).toMatchObject([{ id, role: "viewer" }]);
+});
+
+it("refuses new or changed URN group grants before writing", async () => {
+  const id = "urn:group:team";
+  const env = await setup(ALICE, (doc) => {
+    authorization(doc, ALICE, ["Read", "Write", "Control"]).default = FOLDER;
+    group(authorization(doc, id, ["Read"]), id);
+  });
+  const scoped = await loadScopedSharing(env.session, FOLDER);
+  for (const scope of ["folder", "contents"] as const) {
+    await expect(
+      applyScopedSharing(env.session, scoped, {
+        folder: scoped.folder,
+        contents: scoped.contents,
+        groups: { ...scoped.groups, [scope]: [{ id, role: "editor" }] },
+      }),
+    ).rejects.toThrow("Enter a valid group identifier");
+  }
+  expect(env.fetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+});
 
 it("shows group access per scope, makes groups match, and checks groups after a save", async () => {
   // Only the items inside are shared, with a group that can edit them.

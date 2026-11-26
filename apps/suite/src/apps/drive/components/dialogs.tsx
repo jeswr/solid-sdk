@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
@@ -91,7 +92,7 @@ export function DriveDialogs() {
           onSaved={() => invalidate(dialog.item.url)}
           onCloseAutoFocus={restoreDialogFocus}
           // Sheets coordinates a workbook's folder and contents sharing as one.
-          scopedEditor={!dialog.item.workbook}
+          scopedEditor={!isWorkbookLike(dialog.item)}
         />
       )}
       <UploadConflictDialog />

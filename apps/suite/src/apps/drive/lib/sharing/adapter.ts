@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // Drive's thin view-model adapter over the SDK role layer. Discovery, WAC/ACP parsing,
@@ -595,7 +596,7 @@ function groupGrants(rows: readonly RoleGrant[], groups: readonly GroupChoice[])
   const current = new Map(groupAccess(rows).map((group) => [group.id, group]));
   const wanted = new Map<string, SharingRole>();
   for (const group of groups) {
-    if (safeHttpIri(group.id) !== group.id)
+    if (current.get(group.id)?.role !== group.role && safeHttpIri(group.id) !== group.id)
       throw new SharingError("Enter a valid group identifier");
     if (wanted.has(group.id)) throw new SharingError("Duplicate group identifier");
     wanted.set(group.id, group.role);

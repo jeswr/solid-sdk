@@ -1,11 +1,13 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import { toast } from "@jeswr/suite-ui";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
+import { useOptionalAccounts } from "@/shell/session/accounts-context";
 import { useNeedsConnection } from "@/shell/sync/requires-online";
 import type { DriveItem } from "../lib/client/client";
 import { useDrive } from "./drive-context";
@@ -82,6 +84,7 @@ export function createOpenWithController(target: OpenWithTarget) {
 
   function useOpenWith(item: DriveItem | undefined): OpenWithControl | undefined {
     const { session, invalidate } = useDrive();
+    const accounts = useOptionalAccounts();
     // An unsaved text edit in the preview may veto leaving it (#406).
     const { mayLeavePreview } = useDriveUi();
     const router = useRouter();
@@ -92,9 +95,18 @@ export function createOpenWithController(target: OpenWithTarget) {
       base?.kind === "convert" && base.disabledReason === undefined && !connection.disabled,
     );
     const busy = useRef(false);
-    // The account at completion, which may differ from the one the import started in.
-    const current = useRef(session);
-    current.current = session;
+    const key = JSON.stringify([session.mode, session.webId, session.storageUrl]);
+    const controller = useRef({ key, mounted: false });
+    useLayoutEffect(() => {
+      controller.current = { key, mounted: true };
+      return () => {
+        controller.current.mounted = false;
+      };
+    }, [key]);
+    // The shell reads its live store even if this Drive provider has been replaced.
+    // Standalone previews only have the session supplied by their keyed provider.
+    const isActiveAccount = () =>
+      accounts?.isActiveAccount(session) ?? controller.current.key === key;
     const [pending, setPending] = useState(false);
     if (!item) return undefined;
     const state = target.state(item, {
@@ -104,7 +116,7 @@ export function createOpenWithController(target: OpenWithTarget) {
     });
     if (!state) return undefined;
     const run = async () => {
-      if (!mayLeavePreview()) return;
+      if (!controller.current.mounted || !isActiveAccount() || !mayLeavePreview()) return;
       if (state.kind === "open") {
         router.push(state.href);
         return;
@@ -113,18 +125,15 @@ export function createOpenWithController(target: OpenWithTarget) {
       busy.current = true;
       setPending(true);
       const loading = toast.loading(`Opening ${item.name} with ${target.name}…`);
-      const started = session;
       try {
-        const result = await target.convert(item, started);
-        if (current.current !== started) {
-          // The account changed while importing: the new item belongs to the previous
-          // account, so neither refresh this Drive's listings nor open it here.
-          toast.dismiss(loading);
+        const result = await target.convert(item, session);
+        toast.dismiss(loading);
+        if (!isActiveAccount()) {
           toast.success(`Opened ${item.name} with ${target.name} in your previous account`);
           return;
         }
+        if (!controller.current.mounted) return;
         invalidate(result.url);
-        toast.dismiss(loading);
         if (result.warning)
           toast.warning("Some items weren't imported", {
             description: result.warning,
@@ -138,7 +147,7 @@ export function createOpenWithController(target: OpenWithTarget) {
         });
       } finally {
         busy.current = false;
-        setPending(false);
+        if (controller.current.mounted) setPending(false);
       }
     };
     return { ...state, run, pending };
