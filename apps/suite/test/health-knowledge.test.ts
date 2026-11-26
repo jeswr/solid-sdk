@@ -106,4 +106,5 @@ it("loads the fictional demo from an in-memory nanopub store", async () => {
   expect(original.facts).toHaveLength(77);
   expect(original.sources).toHaveLength(5);
   expect(projectHealthFacts(value, { owner })).toEqual(original);
-});
+  // Building 77 nanopublications timed out at 30 s on a loaded CI runner (train #689 gate).
+}, 120_000);
