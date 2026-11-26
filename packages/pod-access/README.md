@@ -625,7 +625,8 @@ removed, one giving more than its sources now do is narrowed to the modes they s
 copy they fully cover stays. Other principals on a copied rule keep it; a rule left with
 no principal is removed. Rules the agent holds directly and copies from outside the folder are
 never touched; any place where the agent still has some access is listed in `remaining`. A copy
-of a copy names every ACL it came from and keeps what any of them still gives; a folder
+of a copy names every ACL along its chain and is judged by the nearest one (the deepest folder's
+ACL), since the ACLs below a farther folder cut off its grants; a folder
 with no ACL of its own passes its parent's answer down. Only rules naming the agent are read, so
 another principal's conditional rule (`acl:origin`) never blocks the sweep, while a conditional
 rule naming the agent fails that place. Each

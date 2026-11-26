@@ -7,7 +7,13 @@ import type { Mode } from "../types.js";
 import { validators } from "./client.js";
 import { roleError } from "./errors.js";
 import { type Document, load, request, requireOk, type Snapshot, scoped } from "./http.js";
-import { agentKey, pruneCopiedPrincipal, readPolicy, subjectAgent } from "./rdf.js";
+import {
+  agentKey,
+  type CopySource,
+  pruneCopiedPrincipal,
+  readPolicy,
+  subjectAgent,
+} from "./rdf.js";
 import type { AgentRef, GrantMutationOptions } from "./types.js";
 
 const LDP_CONTAINS = "http://www.w3.org/ns/ldp#contains";
@@ -42,7 +48,7 @@ export interface RemoveCopiedGrantsResult {
 }
 
 /**
- * Whether `documents` give the agent (`key`) any mode on the resource (`members`: on its members).
+ * The modes `documents` give the agent (`key`) on the resource (`members`: on its members).
  * Only rules naming the agent are read, so another principal's conditional rule (`acl:origin`,
  * say) never makes the answer unknown; a conditional rule naming the agent is refused, because
  * whether it still grants them cannot be told.
@@ -117,14 +123,15 @@ function parent(url: string): string {
  *
  * The walk lists the folder breadth first, within `maxResources` and `maxDepth`. In each
  * descendant's own document it takes the agent off only rules copied from the folder's document
- * or from a document of a folder inside it, to what those source documents still give the agent
- * on their members: a copy no source grants any more is removed, one that gives more than its
- * sources still do is narrowed to what they give, and one they fully cover stays. Rules the agent holds directly, and copies from outside the folder, are never touched;
- * places where any access remains are listed in `remaining`. Each change is planned from the
- * document read, re-read before writing, and saved with `If-Match`; a lost race or an unreadable
- * place is listed in `failed` and the walk goes on. A copy of a copy names every document it came
- * from, and is removed only when all of them are stale. A folder with no ACL of its own passes
- * its parent's answer down. Only WebID agents are accepted, and never the caller's own, so the
+ * or from a document of a folder inside it, to what its nearest source document still gives the
+ * agent on its members: a copy that source no longer grants is removed, one giving more than it
+ * still does is narrowed to what it gives, and one it fully covers stays. A copy of a copy names
+ * every document along its chain; only the deepest folder's document counts, because every ACL
+ * below a folder cuts off that folder's grants. Rules the agent holds directly, and copies naming
+ * a document outside the folder, are never touched; places where any access remains are listed
+ * in `remaining`. Each change is planned from the document read, re-read before writing, and
+ * saved with `If-Match`; a lost race or an unreadable place is listed in `failed` and the walk
+ * goes on. A folder with no ACL of its own passes its parent's answer down. Only WebID agents are accepted, and never the caller's own, so the
  * caller's rules are never touched.
  */
 export async function removeCopiedGrants(
@@ -159,12 +166,12 @@ export async function removeCopiedGrants(
   // with no ACL of its own takes its parent's answer: copies made from a deleted ACL keep only
   // what the folder's inherited access still gives the agent. A source whose answer is unknown is
   // left out, so copies made from it are kept.
-  const sources = new Map<string, Set<Mode>>();
+  const sources = new Map<string, CopySource>();
   // Folder URL → the modes its members' effective access gives the agent; null when unknown.
   const reaches = new Map<string, Set<Mode> | null>();
   const topReaches = holds(top, top.own ? [top.own] : top.documents, key, true);
   reaches.set(folder, topReaches);
-  sources.set(top.ownUrl, topReaches);
+  sources.set(top.ownUrl, { folder, modes: topReaches });
   if (top.own && (holds(top, [top.own], key, false).size || topReaches.size))
     result.remaining.push(folder);
   // Each place is read on its own, without the model pin, so a place with no own document
@@ -204,7 +211,7 @@ export async function removeCopiedGrants(
           const inherited = reaches.get(container.url) as Set<Mode> | null;
           if (member.container) {
             reaches.set(member.url, inherited);
-            if (inherited) sources.set(snapshot.ownUrl, inherited);
+            if (inherited) sources.set(snapshot.ownUrl, { folder: member.url, modes: inherited });
           }
         } else {
           if (own.model !== "wac")
@@ -239,7 +246,7 @@ export async function removeCopiedGrants(
           const left = holds(snapshot, [document], key, false).size > 0 || onMembers.size > 0;
           if (member.container) {
             reaches.set(member.url, onMembers);
-            sources.set(own.url, onMembers);
+            sources.set(own.url, { folder: member.url, modes: onMembers });
           }
           if (left) result.remaining.push(member.url);
         }

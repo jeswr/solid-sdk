@@ -636,17 +636,24 @@ export function appendAcp(
 /**
  * Prune `agent`'s copied rules in a WAC document. A rule the roles layer copied
  * (`materializedFrom`) only from documents in `sources` keeps the agent while every mode it gives
- * is still granted on members by one of those documents; otherwise the agent is taken off it, and
- * the modes that are still granted are given back in a narrowed copy of the rule (same scopes and
- * markers). Other principals on a rule keep it; a rule left with no principal is removed whole.
- * Rules the agent holds directly, copies from documents not in `sources`, and rules that do not
- * apply to `resource` are left alone. Returns whether anything changed.
+ * is still granted on members by its nearest source: the document of the deepest folder it names.
+ * A copy of a copy names every document along its chain, but only the nearest one's rules reach
+ * the resource; a farther folder's grant is cut off by every ACL below it. Otherwise the agent is
+ * taken off the rule, and the modes still granted are given back in a narrowed copy of the rule
+ * (same scopes and markers). Other principals on a rule keep it; a rule left with no principal is
+ * removed whole. Rules the agent holds directly, copies naming a document not in `sources`, and
+ * rules that do not apply to `resource` are left alone. Returns whether anything changed.
  */
+/** A source document for copied rules: the folder it governs and what it still gives the agent. */
+export interface CopySource {
+  folder: string;
+  modes: ReadonlySet<Mode>;
+}
 export function pruneCopiedPrincipal(
   dataset: Store,
   resource: string,
   agent: AgentRef,
-  sources: ReadonlyMap<string, ReadonlySet<Mode>>,
+  sources: ReadonlyMap<string, CopySource>,
 ): boolean {
   const [selector, principal] = wacPrincipal(agent);
   let changed = false;
@@ -659,9 +666,11 @@ export function pruneCopiedPrincipal(
     const from = rule.iris(MATERIALIZED_FROM);
     if (!from.length || !from.every((origin) => sources.has(origin))) continue;
     if (!rule.values(ACL + selector).has(principal)) continue;
-    const granted = readModes(
-      from.flatMap((origin) => [...(sources.get(origin) as ReadonlySet<Mode>)].map(modeIri)),
-    );
+    // Every source folder is an ancestor of the resource, so the longest URL is the nearest.
+    const [nearest] = from
+      .map((origin) => sources.get(origin) as CopySource)
+      .sort((a, b) => b.folder.length - a.folder.length) as [CopySource];
+    const granted = readModes([...nearest.modes].map(modeIri));
     const modes = readModes(rule.iris(`${ACL}mode`));
     if ([...modes].every((mode) => granted.has(mode))) continue;
     const kept = [...modes].filter((mode) => granted.has(mode));

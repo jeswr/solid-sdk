@@ -275,6 +275,7 @@ it("words a partial revoke without naming a place both removed and not removed",
         ...items.map((url) => ({ url, error: new Error("x") })),
         { url: items[0] as string, error: new Error("again") },
         { url: folder, error: new IncompleteFolderCheckError() },
+        { url: folder, error: new IncompleteFolderCheckError() },
       ],
     ),
     ROOT,
@@ -282,6 +283,7 @@ it("words a partial revoke without naming a place both removed and not removed",
   expect(text).toContain(PARTIAL_REVOKE);
   expect(text).toContain("and 2 more.");
   expect(text).toContain("Not everything inside notes/ could be checked");
+  expect(text).not.toContain("notes/, notes/");
   expect(text).toContain("Removed: notes/.");
   expect(text).not.toMatch(/Not removed:[^.]*notes\/[,.]/);
   expect(

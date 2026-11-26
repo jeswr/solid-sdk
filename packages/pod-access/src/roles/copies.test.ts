@@ -274,6 +274,37 @@ describe("removeCopiedGrants", () => {
     expect(await agentsOn(mem, nested)).toEqual([bob, owner, carol, dave].sort());
   });
 
+  it("judges a copy of a copy by its nearest source, not a farther one that still grants", async () => {
+    const { mem, options } = setup(acl(ownerRule + rule("bob", [bob], "acl:Read, acl:Write")));
+    const deeper = `${sub}deeper/`;
+    const leaf = `${deeper}y.ttl`;
+    mem.put(sub, listing("x.ttl", "deeper/"));
+    mem.advertise(deeper);
+    mem.put(deeper, listing("y.ttl"));
+    mem.advertise(leaf);
+    await shareWithCarol(options, sub);
+    await shareWithCarol(options, deeper, dave);
+    await shareWithCarol(options, leaf, "https://eve.example/#me");
+    // Bob is made an editor on sub/ directly and lowered to viewer on deeper/; deeper/'s ACL cuts
+    // sub/'s Write off from y.ttl, so only the approval's copy gives him Write there.
+    const folderOptions = { ...options, kind: "folder" as const };
+    for (const [url, role] of [
+      [sub, "editor"],
+      [deeper, "viewer"],
+    ] as const) {
+      await removeGrant([url], bobRef, folderOptions);
+      await addGrant([url], { agent: bobRef, role, inherited: false, source: "" }, folderOptions);
+    }
+    await removeGrant([folder], bobRef, folderOptions);
+    const result = await removeCopiedGrants(folder, bobRef, options);
+    expect(result).toMatchObject({ failed: [], incomplete: false });
+    expect(result.removed).toContain(leaf);
+    const leafGrants = await readGrants(leaf, options);
+    expect(leafGrants.grants.filter((g) => g.agent.type === "webid" && g.agent.id === bob)).toEqual(
+      [expect.objectContaining({ role: "viewer" })],
+    );
+  });
+
   it("keeps copies made below a folder whose own access could not be read", async () => {
     const { mem, options } = setup(acl(ownerRule));
     const deeper = `${sub}deeper/`;
