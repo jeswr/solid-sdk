@@ -3218,6 +3218,7 @@ it.each([
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
 it("runs the connectors job once under the process lease before releasing it", async () => {
   const h = harness();
   const tick = vi.fn(async (signal?: AbortSignal) => {

@@ -90,7 +90,6 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
     connectors: { enabled: false },
     prepare: async (workspace) => ({ ...(await prepare(workspace)), connectors: injected }),
   });
-  });
   expect(ignored.connectors).toBeUndefined();
   const enabled = await composeDaemon({ ...options, connectors: { enabled: true }, prepare });
   expect(enabled.connectors).toEqual(
