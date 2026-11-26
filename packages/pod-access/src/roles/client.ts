@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
@@ -20,12 +21,15 @@ import {
   readPolicy,
   removeAcpAgent,
   replaceWac,
+  retainWacPrincipals,
   subjectAgent,
 } from "./rdf.js";
 import type {
+  AccessModesSnapshot,
   AgentRef,
   GrantMutationOptions,
   GrantSnapshot,
+  PrincipalModes,
   Role,
   RoleGrant,
   RolesOptions,
@@ -198,6 +202,34 @@ function version(snapshot: Snapshot, options: RolesOptions, comments?: Snapshot)
     comments ? validators(comments) : null,
   ]) as GrantSnapshot["version"];
 }
+/**
+ * Read every principal's raw modes, including principals whose modes map to no role (Append
+ * only, Write without Read, Control without edit), which `readGrants` omits. `resource` is the
+ * effective policy of the resource itself: its own document, else the nearest ancestor's
+ * inherited (`acl:default`) rules. For a container URL, `members` is what its members inherit:
+ * its own member-scope rules, else the same inherited rules; it is empty for other resources.
+ * Conditional policies are refused, as in `readGrants`. `governedBy` names whose access document
+ * applies, so a caller can tell inherited access from a resource's own. The version token equals
+ * the one `readGrants` returns for the same options, so it can guard a later `setGrants`.
+ */
+export async function readAccessModes(
+  url: string,
+  options: RolesOptions,
+): Promise<AccessModesSnapshot> {
+  const snapshot = await load(url, options);
+  const comments = options.commentsContainer
+    ? await load(options.commentsContainer, options)
+    : undefined;
+  const list = (rows: Map<string, Row>): PrincipalModes[] =>
+    [...rows.values()].map((row) => ({ agent: row.agent, modes: [...row.modes].sort() }));
+  return {
+    url,
+    resource: list(rows(snapshot)),
+    members: url.endsWith("/") ? list(rows(snapshot, snapshot.documents, true)) : [],
+    governedBy: snapshot.model === "acp" ? url : (snapshot.documents[0]?.resource ?? null),
+    version: version(snapshot, options, comments),
+  };
+}
 /** Read roles and an opaque serialisable token covering discovery, absence and source ETags. */
 export async function readGrants(url: string, options: RolesOptions): Promise<GrantSnapshot> {
   const snapshot = await load(url, options);
@@ -255,9 +287,18 @@ async function plan(
   const changes = [...keys].filter(
     (key) => !sameModes(before.get(key)?.modes ?? new Set(), desired.get(key)?.modes ?? new Set()),
   );
+  // A WAC seal must also drop principal-less or scope-less rules that earlier edits (or other
+  // tools) left behind, even when no row changes, or the document never verifies as owner-only.
+  const sealed = options.ownOnly && snapshot.model === "wac" && snapshot.own;
+  const residue =
+    sealed &&
+    retainWacPrincipals(
+      new Store([...sealed.dataset]),
+      [...desired.values()].map((row) => row.agent),
+    );
   // Moves must also preserve an existing empty own ACR. An empty ACP selection still
   // inherits controls; WAC's empty selection is refused by the lockout check below.
-  if (!changes.length && !(options.ownOnly && !snapshot.own)) return undefined;
+  if (!changes.length && !residue && !(options.ownOnly && !snapshot.own)) return undefined;
   const me = agentKey({ type: "webid", id: options.webId });
   // Require direct, independently established management; public/group/client access
   // must not be the only safeguard against the caller locking themselves out.
@@ -306,6 +347,13 @@ async function plan(
         folderScope(snapshot, options),
       );
     }
+    // Sealing replaces own access with exactly the desired principals: no other principal
+    // class (public or authenticated Append included) and no rule left without a principal.
+    if (options.ownOnly)
+      retainWacPrincipals(
+        dataset,
+        [...desired.values()].map((row) => row.agent),
+      );
   } else {
     const selected = agent
       ? [agent]
@@ -480,7 +528,9 @@ async function prepare(
     desired.set(agentKey(grant.agent), { agent: grant.agent, modes: values });
   }
   // A richer explicit policy cannot silently disappear through a lossy role projection.
-  for (const row of current.values())
+  // A seal (ownOnly) drops every principal outside the selection by design, so a principal
+  // whose raw modes map to no role (Append only) is removed rather than refused.
+  for (const row of options.ownOnly ? [] : current.values())
     if (
       role(
         row,

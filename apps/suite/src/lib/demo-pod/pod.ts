@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
@@ -17,7 +18,8 @@
  * - DELETE of a non-empty container is 409; the root cannot be deleted;
  * - the `.acl` document of an existing resource is auxiliary: like CSS, it is
  *   not listed in `ldp:contains` and is deleted together with its subject;
- * - `Link` headers carry `rel="type"`, `rel="acl"` and the storage root type;
+ * - `Link` headers carry `rel="type"`, `rel="acl"`, the storage root type and
+ *   `solid:storageDescription` to a read-only resource under `/.well-known/`;
  * - `X-Solid-Demo-Access-Control: none` explicitly reports the lack of enforcement.
  *
  * Listings are serialised with `n3.Writer` the way a server would emit them.
@@ -40,6 +42,7 @@ const XSD = "http://www.w3.org/2001/XMLSchema#";
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const IANA = "http://www.w3.org/ns/iana/media-types/";
 const PIM_STORAGE = "http://www.w3.org/ns/pim/space#Storage";
+const STORAGE_DESCRIPTION = "http://www.w3.org/ns/solid/terms#storageDescription";
 
 /** Find the envelope boundary without interpreting Turtle inside it. N3 validates the body. */
 function insertDataBody(source: string): string | null {
@@ -96,6 +99,17 @@ class ListedResource extends TermWrapper {
   }
 }
 
+/** No service or capability entries are required for a storage that advertises none. */
+function storageDescription(root: string): Promise<string> {
+  const dataset = new Store();
+  new ListedResource(root, dataset, DataFactory).types.add(PIM_STORAGE);
+  const writer = new Writer({ format: "text/turtle" });
+  writer.addQuads([...dataset]);
+  return new Promise((resolve, reject) => {
+    writer.end((error, result) => (error ? reject(error) : resolve(result)));
+  });
+}
+
 /** One stored resource (containers carry no body; their listing is generated). */
 export interface DemoResource {
   readonly body: Uint8Array;
@@ -117,6 +131,8 @@ export interface DemoPodSnapshot {
 
 /** A resource to place in a fresh pod. Paths are relative to the pod root. */
 export interface DemoSeedFile {
+  /** Display metadata for the demo account's existing cross-app search source. */
+  readonly search?: import("@jeswr/suite-sdk/chips").ChipRef;
   readonly path: string;
   readonly body: Uint8Array | string;
   readonly contentType: string;
@@ -271,6 +287,19 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     }
   }
 
+  // Older snapshots could use the discovery path for ordinary files or containers.
+  const descriptionBase = new URL("/.well-known/solid", root).href;
+  let descriptionUrl = descriptionBase;
+  for (
+    let suffix = 1;
+    resources.has(descriptionUrl) || containers.has(`${descriptionUrl}/`);
+    suffix += 1
+  ) {
+    descriptionUrl = `${descriptionBase}-${suffix}`;
+  }
+  const reservedDescriptionPath = (url: string) =>
+    url === descriptionUrl || url.startsWith(`${descriptionUrl}/`);
+
   // An ACL document of an existing subject is auxiliary: addressable, but not a
   // container member. An orphan "x.acl" stays listed so clients' guards against
   // ACL-named files remain testable against this fixture.
@@ -335,12 +364,15 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
   };
 
   const linkHeader = (url: string): string => {
-    const links = [`<${LDP}Resource>; rel="type"`];
+    const links = [
+      `<${LDP}Resource>; rel="type"`,
+      `<${descriptionUrl}>; rel="${STORAGE_DESCRIPTION}"`,
+    ];
     if (isContainerUrl(url)) {
       links.push(`<${LDP}Container>; rel="type"`, `<${LDP}BasicContainer>; rel="type"`);
     }
     if (url === root) links.push(`<${PIM_STORAGE}>; rel="type"`);
-    if (!url.endsWith(".acl")) links.push(`<${url}.acl>; rel="acl"`);
+    if (url !== descriptionUrl && !url.endsWith(".acl")) links.push(`<${url}.acl>; rel="acl"`);
     return links.join(", ");
   };
 
@@ -412,6 +444,7 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
   };
 
   const write = async (url: string, init: RequestInit, headers: Headers): Promise<Response> => {
+    if (reservedDescriptionPath(url)) return respond(409);
     // All asynchronous body work precedes the precondition and mutation. No
     // await is allowed in the critical section below (including notifications).
     const body = await bodyBytes(init.body);
@@ -452,7 +485,11 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     const slug = (headers.get("slug") ?? "").replace(/[/\\]/g, "-").trim();
     const base = encodeURIComponent(slug || crypto.randomUUID());
     let candidate = `${url}${base}${asContainer ? "/" : ""}`;
-    for (let n = 1; resources.has(candidate) || containers.has(candidate); n += 1) {
+    for (
+      let n = 1;
+      reservedDescriptionPath(candidate) || resources.has(candidate) || containers.has(candidate);
+      n += 1
+    ) {
       candidate = `${url}${base}-${n}${asContainer ? "/" : ""}`;
     }
     const childHeaders = new Headers();
@@ -551,6 +588,18 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     const method = (init.method ?? request?.method ?? "GET").toUpperCase();
     const headers = new Headers(init.headers ?? request?.headers);
     if (latency > 0) await new Promise((resolve) => setTimeout(resolve, latency));
+    // Server metadata is virtual, survives old snapshots and is never a container member.
+    // Like CSS, it lives at the origin even when the storage root has a path prefix.
+    if (url === descriptionUrl) {
+      if (method === "GET" || method === "HEAD") {
+        return respond(
+          200,
+          { "content-type": "text/turtle", link: linkHeader(url) },
+          method === "HEAD" ? undefined : await storageDescription(root),
+        );
+      }
+      return respond(method === "OPTIONS" ? 204 : 405, { allow: "GET, HEAD, OPTIONS" });
+    }
     if (!url.startsWith(root)) return respond(404);
     const effectiveInit: RequestInit =
       init.body === undefined && request && method !== "GET" && method !== "HEAD"
@@ -571,7 +620,10 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
         if (preconditionFails(url, headers)) return respond(412);
         return remove(url);
       case "OPTIONS":
-        return respond(204, { allow: "GET, HEAD, PUT, POST, PATCH, DELETE, OPTIONS" });
+        return respond(204, {
+          allow: "GET, HEAD, PUT, POST, PATCH, DELETE, OPTIONS",
+          link: linkHeader(url),
+        });
       default:
         return respond(405, { allow: "GET, HEAD, PUT, POST, PATCH, DELETE, OPTIONS" });
     }
@@ -590,6 +642,6 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    has: (url) => resources.has(url) || containers.has(url),
+    has: (url) => url === descriptionUrl || resources.has(url) || containers.has(url),
   };
 }

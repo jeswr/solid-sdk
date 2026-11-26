@@ -1042,3 +1042,20 @@ describe("accessibility", () => {
     });
   }
 });
+
+it("labels a group recipient picker separately from people", () => {
+  render(
+    <PeoplePicker
+      label="Add groups"
+      addLabel="Add group"
+      contacts={{ people: [], state: { kind: "ready" } }}
+      value={[]}
+      onChange={() => {}}
+      query=""
+      onQueryChange={() => {}}
+      useProfile={() => ({ loading: false })}
+    />,
+  );
+  expect(screen.getByRole("combobox", { name: "Add groups" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Add group" })).toBeTruthy();
+});

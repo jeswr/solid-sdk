@@ -93,6 +93,18 @@ final class PushStore {
         for (Object reg : registrations().values()) PushJson.object(reg).put("silenced", true);
         save();
     }
+    synchronized void setRenewalExpiry(Long expiry) throws IOException {
+        if (expiry == null) state.remove("renewalExpiry"); else state.put("renewalExpiry", expiry);
+        save();
+    }
+    synchronized Long renewalExpiry() {
+        Object value = state.get("renewalExpiry");
+        return value instanceof Long ? (Long) value : null;
+    }
+    /** Recheck replacement, expiry and local silence under the same lock as notification posting. */
+    synchronized boolean withRenewalReminder(long expiry, long now, Runnable action) {
+        return expiry > now && Long.valueOf(expiry).equals(state.get("renewalExpiry")) && withAnyActive(action);
+    }
     synchronized void clear() throws IOException { state = empty(); save(); }
     static final class Delivery {
         final PushPolicy.Payload payload;
@@ -151,11 +163,19 @@ final class PushStore {
         launch.put("topicIndex", (long) index);
         state.put("launch", launch); PushJson.object(state.get("counts")).remove(PushPolicy.group(registration, index)); save();
     }
+    synchronized void launchNotifications() throws IOException {
+        Map<String, Object> launch = new LinkedHashMap<>(); launch.put("notifications", true);
+        state.put("launch", launch); save();
+    }
     synchronized Map<String, Object> consumeLaunch() throws IOException {
         Object raw = state.remove("launch");
         Map<String, Object> result = null;
         if (raw != null) {
             Map<String, Object> launch = PushJson.object(raw);
+            if (Boolean.TRUE.equals(launch.get("notifications"))) {
+                result = new LinkedHashMap<>(); result.put("registrationId", null); result.put("route", "/notifications");
+                save(); return result;
+            }
             String registration = PushPolicy.id(launch.get("registrationId"));
             // Old saved routes have no index: consume them with the safe fallback only.
             Map<String, Object> topic = launch.containsKey("topicIndex") ? topic(registration, PushJson.integer(launch.get("topicIndex"), 15)) : null;

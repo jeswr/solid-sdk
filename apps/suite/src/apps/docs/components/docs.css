@@ -61,6 +61,7 @@
 }
 .docs-list-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -78,6 +79,7 @@
 }
 .docs-list-create {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .docs-download-menu {

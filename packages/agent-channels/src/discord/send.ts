@@ -17,6 +17,7 @@ import type {
   RenderableProposal,
   Wire,
 } from "../types.js";
+import { preview } from "./preview.js";
 import { readJson, snowflake } from "./shared.js";
 
 export interface DiscordSendOptions {
@@ -128,6 +129,7 @@ export function createDiscordSend(
   }
   return {
     render,
+    preview,
     async validate(wire, proposal, context) {
       try {
         const copy = snapshot(wire);

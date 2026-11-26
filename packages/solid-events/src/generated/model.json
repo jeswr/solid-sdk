@@ -1,0 +1,367 @@
+{
+  "manifestVersion": 1,
+  "runtime": {
+    "name": "@jeswr/model-runtime",
+    "major": 0
+  },
+  "prefixes": {
+    "schema": "https://schema.org/",
+    "ev": "https://jeswr.org/ns/events#",
+    "dct": "http://purl.org/dc/terms/"
+  },
+  "entities": [
+    {
+      "name": "Event",
+      "typeIris": [
+        "https://schema.org/Event"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "created",
+          "predicate": "http://purl.org/dc/terms/created",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "modified",
+          "predicate": "http://purl.org/dc/terms/modified",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "guestListVisible",
+          "predicate": "https://jeswr.org/ns/events#guestListVisible",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#boolean",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "publication",
+          "predicate": "https://jeswr.org/ns/events#publication",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "draft",
+            "published"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "rsvpDeadline",
+          "predicate": "https://jeswr.org/ns/events#rsvpDeadline",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "visibility",
+          "predicate": "https://jeswr.org/ns/events#visibility",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "invitees",
+            "link"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "address",
+          "predicate": "https://schema.org/address",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "description",
+          "predicate": "https://schema.org/description",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "endDate",
+          "predicate": "https://schema.org/endDate",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "eventStatus",
+          "predicate": "https://schema.org/eventStatus",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "https://schema.org/EventScheduled",
+            "https://schema.org/EventCancelled",
+            "https://schema.org/EventPostponed"
+          ],
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https",
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "image",
+          "predicate": "https://schema.org/image",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "location",
+          "predicate": "https://schema.org/location",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "capacity",
+          "predicate": "https://schema.org/maximumAttendeeCapacity",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "maxCount": 1,
+          "guards": {
+            "minInclusive": 0,
+            "maxInclusive": 1000000
+          }
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "nonBlank": true
+          }
+        },
+        {
+          "name": "organizer",
+          "predicate": "https://schema.org/organizer",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https",
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "startDate",
+          "predicate": "https://schema.org/startDate",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "onlineUrl",
+          "predicate": "https://schema.org/url",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invitee",
+      "typeIris": [
+        "https://schema.org/InviteAction"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "displayName",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "nonBlank": true
+          }
+        },
+        {
+          "name": "event",
+          "predicate": "https://schema.org/object",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https",
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "webId",
+          "predicate": "https://schema.org/recipient",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "invitedAt",
+          "predicate": "https://schema.org/startTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rsvp",
+      "typeIris": [
+        "https://schema.org/RsvpAction"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "guestKey",
+          "predicate": "https://jeswr.org/ns/events#guestKey",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "nonBlank": true
+          }
+        },
+        {
+          "name": "additionalGuests",
+          "predicate": "https://schema.org/additionalNumberOfGuests",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "minInclusive": 0,
+            "maxInclusive": 20
+          }
+        },
+        {
+          "name": "agent",
+          "predicate": "https://schema.org/agent",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "comment",
+          "predicate": "https://schema.org/comment",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "displayName",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "nonBlank": true
+          }
+        },
+        {
+          "name": "event",
+          "predicate": "https://schema.org/object",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https",
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "response",
+          "predicate": "https://schema.org/rsvpResponse",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "https://schema.org/RsvpResponseYes",
+            "https://schema.org/RsvpResponseNo",
+            "https://schema.org/RsvpResponseMaybe"
+          ],
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https",
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "repliedAt",
+          "predicate": "https://schema.org/startTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -17,6 +17,7 @@ test("entry points expose the storage client and testing surface", () => {
     "StorageError",
     "createPodClient",
     "displayNameOf",
+    "isAuxiliaryResource",
     "toStorageError",
   ]);
   expect(Object.keys(errors).sort()).toEqual([

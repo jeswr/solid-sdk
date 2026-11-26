@@ -1,7 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /** Adapter contracts and host ports. */
 
+export {
+  createOwnerOnlyDestinationChecks,
+  createOwnerOnlyDestinationVerifier,
+} from "@jeswr/pod-access";
 /** Shared source-run limits and typed partial-run budget failures. */
 export { DEFAULT_RUN_LIMITS, RunBudgetExceededError, type RunLimits } from "./core/budget.js";
 /** Typed connector failures. */
@@ -13,8 +16,6 @@ export * from "./core/import-runner.js";
 /** Fetch-backed Pod writer factory. */
 export * from "./core/pod-writer.js";
 export {
-  createOwnerOnlyDestinationChecks,
-  createOwnerOnlyDestinationVerifier,
   createSessionPrivateDestinationChecks,
   createSessionPrivateDestinationVerifier,
 } from "./core/private-destination.js";

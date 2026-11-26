@@ -83,6 +83,10 @@ describe("connector catalogue", () => {
       "body-health",
       "mobility",
     ]);
+    expect(entries.find((entry) => entry.id === "activity-files")).toMatchObject({
+      status: "import",
+      domains: ["body-health", "mobility"],
+    });
     expect(entries.find((entry) => entry.id === "bank-statements")?.domains).toEqual(["financial"]);
     expect(entries.find((entry) => entry.id === "whoop")?.domains).toEqual(["body-health"]);
     expect(destinationsFor("netflix")).toEqual([{ domain: "media", label: "Media › Streaming" }]);

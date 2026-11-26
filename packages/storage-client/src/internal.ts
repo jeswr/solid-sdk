@@ -37,8 +37,8 @@ export function validateKeepalive(
 /** ADR-003 §4: listAll stops here. */
 export const MAX_PAGES = 10_000;
 
-/** Reject invalid listing caps rather than silently disabling a security limit. */
-export function validateListingMaxBytes(maxBytes: number | undefined): void {
+/** Reject invalid byte caps rather than silently disabling a security limit. */
+export function validateMaxBytes(maxBytes: number | undefined): void {
   if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes < 0)) {
     throw new TypeError("maxBytes must be a non-negative safe integer");
   }

@@ -48,7 +48,7 @@ it.each([
         headers: {
           "content-type": "text/turtle",
           etag: '"d"',
-          link: `${links}, <${collection}>; rel="up"`,
+          link: `${links}, <${collection}>; rel="up", <https://www.w3.org/ns/lws#DataResource>; rel="type"`,
         },
       });
     if (url === podRoot || (url === collection && collectionExists))
@@ -62,7 +62,11 @@ it.each([
         {
           headers: {
             "content-type": "application/lws+json",
-            link: `${links}, <https://www.w3.org/ns/lws#Container>; rel="type"`,
+            link: [
+              links,
+              '<https://www.w3.org/ns/lws#Container>; rel="type"',
+              ...(url === collection ? [`<${podRoot}>; rel="up"`] : []),
+            ].join(", "),
             etag: '"c"',
           },
         },

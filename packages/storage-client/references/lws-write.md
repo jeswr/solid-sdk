@@ -24,7 +24,10 @@ Read with [storage-client guidance](../SKILL.md) and the [LWS read side](lws-rea
   validates their kind. Null bodies become empty bodies; containers default to application/lws+json, resources
   require contentType. Location is mandatory, scoped and query/fragment-free, but need not follow
   the parent's URL path (LWS logical containment). It cannot name the parent or root. Untrusted
-  Location and Content-Location values are never retained in errors or causes.
+  Location and Content-Location values are never retained in errors or causes. A revalidated
+  HEAD verifies one `up` link to the requested parent and the requested LWS type even when the
+  POST has an ETag. Reject known auxiliary identifiers and Link evidence, plus unavailable or
+  inconsistent HEAD metadata, with `invalid-response`. This can happen after the POST committed.
 - Ordinary mutation results use their response ETag or a follow-up HEAD, else null if HEAD fails:
   the mutation already committed. Streaming bodies are forwarded with duplex half and never
   replayed automatically; failures, including HTTP errors, are nonretryable for streams.

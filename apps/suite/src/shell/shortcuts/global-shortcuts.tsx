@@ -33,6 +33,7 @@ function GoToShortcut({ letter, name, href }: { letter: string; name: string; hr
   return null;
 }
 export function GlobalShortcuts({
+  hasSidebar = true,
   onOpenPalette,
   onOpenApps,
   onOpenHelp,
@@ -40,6 +41,7 @@ export function GlobalShortcuts({
   recent,
   onSearch,
 }: {
+  hasSidebar?: boolean;
   onOpenPalette?: () => void;
   onOpenApps?: () => void;
   onOpenHelp?: () => void;
@@ -95,7 +97,12 @@ export function GlobalShortcuts({
         <GoToShortcut key={letter} letter={letter} name={name} href={href} />
       ))}
       {!onOpenHelp && (
-        <ShortcutHelpSheet open={helpOpen} onOpenChange={setHelpOpen} returnFocusTo={helpReturn} />
+        <ShortcutHelpSheet
+          open={helpOpen}
+          onOpenChange={setHelpOpen}
+          returnFocusTo={helpReturn}
+          hasSidebar={hasSidebar}
+        />
       )}
       {!onOpenPalette && (
         <CommandPalette

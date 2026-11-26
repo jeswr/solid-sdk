@@ -1,12 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 
 import { constants, createReadStream } from "node:fs";
 import { open } from "node:fs/promises";
 import { basename } from "node:path";
-import { stderr as nodeStderr, stdout as nodeStdout } from "node:process";
+import { env as nodeEnv, stderr as nodeStderr, stdout as nodeStdout } from "node:process";
 import { Readable } from "node:stream";
+import { createOwnerOnlyDestinationChecks } from "@jeswr/pod-access";
 import { accessModel } from "@jeswr/pod-access/requests-solid";
 import type { StorageClient } from "@jeswr/storage-client";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
@@ -18,7 +18,11 @@ import {
   validateBankOptions,
 } from "../bank-statements/file-adapter.js";
 import { abortableFetch } from "../core/abort.js";
-import { PrivateDestinationError } from "../core/errors.js";
+import {
+  IntegrationAuthError,
+  PrivateDestinationError,
+  UnreadableCredentialError,
+} from "../core/errors.js";
 import {
   type FileImportAdapter,
   type ImportFile,
@@ -26,16 +30,17 @@ import {
   runFileImport,
 } from "../core/file-import.js";
 import { createSourceAuth, runImport } from "../core/import-runner.js";
+import { createOAuthSourceAuth, getOAuthToken, TOKEN_REQUEST_TIMEOUT_MS } from "../core/oauth.js";
 import {
   adapterContainer,
   requirePrivateDestination,
   requiresPrivateDestination,
 } from "../core/pod-writer-policy.js";
-import { createOwnerOnlyDestinationChecks } from "../core/private-destination.js";
 import { createStoragePodWriter, createWacImportStorage } from "../core/storage-pod-writer.js";
-import type { ConnectorState, PrivateWriteVersion, SourceAuth } from "../core/types.js";
+import type { ConnectorState, PrivateWriteVersion, SourceAuth, TokenSet } from "../core/types.js";
 import { fileAdapterById } from "../file-adapters.js";
 import { createRegistry } from "../registry.js";
+import { ConnectorTokenVault, importVaultKey } from "../vault.js";
 import { createVeSyncAdapter } from "../vesync/adapter.js";
 import { REQUEST_TIMEOUT_MS } from "../vesync/api.js";
 import { VeSyncAuthError } from "../vesync/errors.js";
@@ -44,6 +49,7 @@ import { NodeRuntimeError } from "./errors.js";
 import { authorizeLoopback } from "./loopback.js";
 import { createClientCredentialsFetch } from "./pod-auth.js";
 import { type CliConnectorState, createStateStore } from "./state.js";
+import { FileVaultStore } from "./vault-store.js";
 import {
   createVeSyncSourceAuth,
   readVeSyncCredentials,
@@ -54,8 +60,10 @@ import { type delay, watchImports } from "./watch.js";
 
 const BANK_ID = "bank-statements";
 const BANK_FORMATS = ["auto", ...BANK_CSV_FORMATS] as const;
-const USAGE = `Usage: pod-connectors import <id> [--file <path>] [--since] [--watch [minutes]] [--room <label> | --room <sensor-slug>=<label>]
+const USAGE = `Usage: pod-connectors import <id> [--file <path>] [--since] [--vault <dir>] [--watch [minutes]] [--room <label> | --room <sensor-slug>=<label>]
        pod-connectors import ${BANK_ID} --file <path> [--format <format>] [--account-label <text>]
+
+Refresh credentials are encrypted only with --vault and CONNECTOR_VAULT_KEY (canonical base64, 32 bytes).
 
 Bank statement options (${BANK_ID} file imports only):
   --format <${BANK_FORMATS.join("|")}>
@@ -88,6 +96,8 @@ export interface CliOptions {
   readonly configPath?: string;
   /** Node-only account port; returns an MD5 hash, never plaintext. */
   readonly vesyncCredentials?: () => Promise<VeSyncCredentials>;
+  /** Defaults to CONNECTOR_VAULT_KEY in the Node CLI host only. */
+  readonly vaultKey?: string;
   readonly stdout?: (message: string) => void;
   readonly stderr?: (message: string) => void;
   readonly podTransport?: typeof fetch;
@@ -100,6 +110,11 @@ export interface CliOptions {
   readonly sourceTransport?: typeof fetch;
   readonly sourceAuth?: SourceAuth;
   readonly openAuthorizationUrl?: (url: string) => void | Promise<void>;
+  /**
+   * Defaults to true. False never starts loopback login: a missing or unreadable refresh
+   * credential exits with the auth code (3) and a reconnect message instead.
+   */
+  readonly interactiveLogin?: boolean;
   readonly signal?: AbortSignal;
   /** Fixture seams for `--watch` and VeSync retry delays (abortable sleep, jitter source). */
   readonly sleep?: typeof delay;
@@ -111,6 +126,7 @@ export function parseImportArgs(args: readonly string[]): {
   id: string;
   file?: string;
   since: boolean;
+  vault?: string;
   watch?: number;
   room?: string | Readonly<Record<string, string>>;
   /** Validated bank-statements adapter options; present only when a bank flag was given. */
@@ -123,6 +139,7 @@ export function parseImportArgs(args: readonly string[]): {
   let format: string | undefined;
   let accountLabel: string | undefined;
   let since = false;
+  let vault: string | undefined;
   let watch: number | undefined;
   let room: string | undefined;
   const rooms: Record<string, string> = {};
@@ -160,6 +177,7 @@ export function parseImportArgs(args: readonly string[]): {
         );
     } else if (flag === "--since" && !since) since = true;
     else if (flag === "--file" && file === undefined && hasValue) file = flags[++i];
+    else if (flag === "--vault" && vault === undefined && hasValue) vault = flags[++i];
     else if (flag === "--format" && format === undefined && hasValue) format = flags[++i];
     else if (flag === "--account-label" && accountLabel === undefined && hasValue)
       accountLabel = flags[++i];
@@ -179,6 +197,7 @@ export function parseImportArgs(args: readonly string[]): {
     id,
     file,
     since,
+    ...(vault !== undefined ? { vault } : {}),
     ...(watch !== undefined ? { watch } : {}),
     ...(room !== undefined ? { room } : Object.keys(rooms).length ? { room: rooms } : {}),
   };
@@ -311,6 +330,18 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
   try {
     options.signal?.throwIfAborted();
     const command = parseImportArgs(args);
+    let encodedKey = options.vaultKey;
+    if (encodedKey === undefined) {
+      encodedKey = nodeEnv.CONNECTOR_VAULT_KEY;
+      // Child processes and later diagnostics never inherit the key.
+      delete nodeEnv.CONNECTOR_VAULT_KEY;
+    }
+    if (command.vault && !encodedKey)
+      throw new NodeRuntimeError("config", "--vault requires CONNECTOR_VAULT_KEY.");
+    if (encodedKey && !command.vault)
+      stderr(
+        "CONNECTOR_VAULT_KEY supplied without --vault; refresh credentials remain in memory.\n",
+      );
     const config = await readNodeConfig(options.configPath);
     const registry = createRegistry(config.connectors);
     const adapter =
@@ -331,9 +362,16 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
       : undefined;
     // Source requests, login, and non-private imports retain ordinary run cancellation.
     const withSignal =
-      (transport: typeof fetch): typeof fetch =>
+      (transport: typeof fetch, ownController?: ReadonlySet<string>): typeof fetch =>
       async (input, init) => {
         options.signal?.throwIfAborted();
+        if (ownController?.has(String(input instanceof Request ? input.url : input)))
+          return transport(
+            input,
+            init?.signal
+              ? init
+              : { ...init, signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS) },
+          );
         const effectiveSignal =
           init?.signal ?? (input instanceof Request ? input.signal : undefined);
         const signals = [
@@ -447,17 +485,54 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
     if (!file && !sourceAuth) {
       if (!adapter?.oauth)
         throw new NodeRuntimeError("auth", "This connector has no source OAuth configuration.");
-      const sourceFetch = withSignal(options.sourceTransport ?? globalThis.fetch);
       const sourceConfig = { ...adapter.oauth, ...config.connectors[command.id] };
-      const token = await authorizeLoopback(command.id, sourceConfig, sourceFetch, {
+      if (sourceConfig.clientSecret) sourceConfig.tokenExchange = "public";
+      const tokenUrls = new Set(
+        [
+          sourceConfig.tokenEndpoint,
+          sourceConfig.tokenProxyUrl,
+          sourceConfig.revocationEndpoint,
+        ].filter((url): url is string => typeof url === "string"),
+      );
+      const sourceFetch = withSignal(options.sourceTransport ?? globalThis.fetch, tokenUrls);
+      let vault: ConnectorTokenVault | undefined;
+      if (command.vault && encodedKey) {
+        try {
+          vault = new ConnectorTokenVault(
+            await importVaultKey(encodedKey),
+            new FileVaultStore(command.vault),
+          );
+        } catch {
+          throw new NodeRuntimeError("config", "Cannot initialize connector vault.");
+        }
+      }
+      const vaultOptions = {
+        vault,
+        account: sourceConfig.account ?? "default",
+        signal: options.signal,
+      };
+      const interactive = options.interactiveLogin !== false;
+      let token: TokenSet | undefined;
+      try {
+        token = await getOAuthToken(command.id, sourceConfig, sourceFetch, vaultOptions);
+      } catch (error) {
+        // An undecryptable record (e.g. a rotated key) would fail every rerun; the code exchange
+        // below replaces it without reading it. Revocation still requires an explicit rerun.
+        if (!(error instanceof UnreadableCredentialError) || !interactive) throw error;
+      }
+      if (!token && !interactive)
+        throw new IntegrationAuthError(command.id, "reauthorise", "Reconnect this source account.");
+      token ??= await authorizeLoopback(command.id, sourceConfig, sourceFetch, {
+        ...vaultOptions,
         openAuthorizationUrl:
           options.openAuthorizationUrl ??
           ((url) => stderr(`Open this URL to connect the source:\n${url}\n`)),
         signal: options.signal,
       });
-      sourceAuth =
-        adapter.createSourceAuth?.(sourceConfig, token, sourceFetch) ??
-        createSourceAuth(command.id, adapter, token, sourceFetch);
+      sourceAuth = vault
+        ? createOAuthSourceAuth(adapter, sourceConfig, sourceFetch, { ...vaultOptions, token })
+        : (adapter.createSourceAuth?.(sourceConfig, token, sourceFetch) ??
+          createSourceAuth(command.id, adapter, token, sourceFetch));
     }
     const execute = async () => {
       let next: ConnectorState | undefined;
@@ -515,6 +590,7 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
           await writeState(previous ? { ...previous, lastOutcome: "error" } : next);
         }
         if (error instanceof VeSyncAuthError) throw new NodeRuntimeError("auth", error.message);
+        if (error instanceof IntegrationAuthError) throw error;
         throw new NodeRuntimeError(
           "import",
           "Import failed; the last successful checkpoint was retained.",
@@ -569,10 +645,17 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
         ? new NodeRuntimeError("auth", error.message)
         : error instanceof NodeRuntimeError
           ? error
-          : new NodeRuntimeError(
-              "import",
-              error instanceof PrivateDestinationError ? error.message : "Import failed.",
-            );
+          : error instanceof IntegrationAuthError
+            ? new NodeRuntimeError(
+                "auth",
+                error.reason === "reauthorise"
+                  ? "Reconnect this source account."
+                  : "Source authentication failed.",
+              )
+            : new NodeRuntimeError(
+                "import",
+                error instanceof PrivateDestinationError ? error.message : "Import failed.",
+              );
     stderr(`${failure.message}\n`);
     return EXIT_CODES[failure.kind];
   }

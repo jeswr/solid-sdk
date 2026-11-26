@@ -140,7 +140,9 @@ function Frame({
           />
         }
         sidebar={
-          sidebar ?? { label: `${app.name} sections`, sections: app.sidebar?.({ pathname }) ?? [] }
+          sidebar === undefined
+            ? { label: `${app.name} sections`, sections: app.sidebar?.({ pathname }) ?? [] }
+            : sidebar
         }
         {...(details ? { details } : {})}
         topBar={{
@@ -183,10 +185,11 @@ function Frame({
  * Global shortcuts (and the palette and help sheet they open) exist only while the
  * session is usable: an expired session's re-auth dialog must stay the only layer.
  */
-function ReadyShortcuts() {
+function ReadyShortcuts({ hasSidebar }: { hasSidebar: boolean }) {
   const { status } = useAccounts();
   return status === "ready" ? (
     <GlobalShortcuts
+      hasSidebar={hasSidebar}
       onOpenApps={() => {
         // The rail and mobile tab bar own their launchers. Activate the visible native
         // trigger once the palette has closed, so focus and cleanup match pointer entry.
@@ -206,7 +209,7 @@ export function SuiteShell(props: SuiteShellProps) {
     <Suspense>
       <SessionGuard>
         <ShortcutsProvider>
-          <ReadyShortcuts />
+          <ReadyShortcuts hasSidebar={props.sidebar !== null} />
           <Frame {...props} />
         </ShortcutsProvider>
       </SessionGuard>

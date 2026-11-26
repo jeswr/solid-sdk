@@ -9,7 +9,7 @@ import { IconButton } from "../components/ui/icon-button.js";
 import { AppGrid } from "./app-grid.js";
 import { type AppSlug, type NavigationApp, suiteApps, visibleNavigationApps } from "./apps.js";
 import { CustomiseRail } from "./customise-rail.js";
-import { usePreferences } from "./preferences.js";
+import { useOptionalRailPreferences } from "./preferences.js";
 import { LauncherSkeleton, NavigationErrorState } from "./states.js";
 
 export interface AppLauncherProps {
@@ -29,7 +29,7 @@ export function AppLauncher({
   const [customise, setCustomise] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const id = useId();
-  const preferences = usePreferences("rail");
+  const preferences = useOptionalRailPreferences();
   const visible = visibleNavigationApps(apps, showBacklog);
   const available = visible.filter((app) => app.status !== "backlog");
   const backlog = visible.filter((app) => app.status === "backlog");
@@ -149,13 +149,13 @@ export function AppLauncher({
               }
             }}
           />
-          {preferences.status === "loading" ? (
+          {preferences?.status === "loading" ? (
             <LauncherSkeleton />
-          ) : preferences.error ? (
+          ) : preferences?.error ? (
             <NavigationErrorState error={preferences.error} retry={preferences.retry} />
           ) : (
             <>
-              {preferences.status === "refreshing" && (
+              {preferences?.status === "refreshing" && (
                 <div
                   className="suite-refresh"
                   role="status"
@@ -165,18 +165,20 @@ export function AppLauncher({
               {available.length === 0 && backlog.length === 0 ? (
                 <div className="suite-navigation-state">
                   <p>No apps available</p>
-                  <button
-                    type="button"
-                    data-slot="navigation-action"
-                    className="suite-action"
-                    onClick={preferences.retry}
-                  >
-                    Retry
-                  </button>
+                  {preferences && (
+                    <button
+                      type="button"
+                      data-slot="navigation-action"
+                      className="suite-action"
+                      onClick={preferences.retry}
+                    >
+                      Retry
+                    </button>
+                  )}
                 </div>
               ) : (
                 <>
-                  {preferences.value.pinned.length === 0 && (
+                  {preferences?.value.pinned.length === 0 && (
                     <div className="suite-navigation-state">
                       <p>No apps pinned yet</p>
                       <button
@@ -259,20 +261,22 @@ export function AppLauncher({
               </div>
             </section>
           )}
-          <footer className="suite-launcher-footer">
-            <button
-              type="button"
-              data-slot="navigation-text-button"
-              className="suite-text-button"
-              aria-expanded={customise}
-              aria-controls={`${id}-customise`}
-              disabled={preferences.status === "loading" || Boolean(preferences.error)}
-              onClick={() => setCustomise((value) => !value)}
-            >
-              Customise rail
-            </button>
-          </footer>
-          {customise && (
+          {preferences && (
+            <footer className="suite-launcher-footer">
+              <button
+                type="button"
+                data-slot="navigation-text-button"
+                className="suite-text-button"
+                aria-expanded={customise}
+                aria-controls={`${id}-customise`}
+                disabled={preferences.status === "loading" || Boolean(preferences.error)}
+                onClick={() => setCustomise((value) => !value)}
+              >
+                Customise rail
+              </button>
+            </footer>
+          )}
+          {preferences && customise && (
             <div id={`${id}-customise`}>
               <CustomiseRail apps={configurable} />
             </div>

@@ -1,10 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { type Identity as Claims, sameIssuer } from "@jeswr/reactive-authentication";
 import { createAgentAuth } from "./agent.js";
 import { StorageFailure } from "./kv.js";
-import { secureUrl, validateOptions } from "./options.js";
+import { accountMatches, extraResourceOrigins, secureUrl, validateOptions } from "./options.js";
 import { AmbiguousIssuerError, createProviders } from "./providers.js";
 import { decideSilentRestore } from "./session-restore.js";
 import { type LoginOwnership, OwnershipChangedError } from "./sessions.js";
@@ -25,6 +24,8 @@ export type {
   AuthEvent,
   AuthEventType,
   CidSubject,
+  FetchAccount,
+  FetchForOptions,
   GrantOwner,
   GrantRetirementResult,
   Identity,
@@ -229,8 +230,9 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     }
     return false;
   };
-  const api: PodAuth = {
-    fetch: async (input, init) => {
+  const fetchWithExpiry =
+    (fetch: typeof globalThis.fetch): typeof globalThis.fetch =>
+    async (input, init) => {
       lifetime.signal.throwIfAborted();
       if (expired) throw new Error("Session expired");
       const started = epoch;
@@ -238,7 +240,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       if (started !== epoch) throw new Error("Session changed during authentication");
       const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
       try {
-        const response = await providers.manager.fetch(input, {
+        const response = await fetch(input, {
           ...init,
           signal: AbortSignal.any([lifetime.signal, ...(signal == null ? [] : [signal])]),
         });
@@ -248,6 +250,42 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         await checkExpiry(started);
         throw error;
       }
+    };
+  const api: PodAuth = {
+    fetch: fetchWithExpiry(providers.manager.fetch),
+    fetchFor: (account, fetchOptions) => {
+      const origins = extraResourceOrigins(fetchOptions);
+      if (!accountMatches(account, current)) throw new Error("Account session is unavailable");
+      const selected = snapshot()!;
+      const started = epoch;
+      const sessionSignal = providers.fence.signal;
+      const assertSession = () => {
+        if (
+          started !== epoch ||
+          !accountMatches(selected, current) ||
+          (origins.length > 0 && current?.protocol !== "solid-oidc")
+        )
+          throw new Error("Account session is unavailable");
+        sessionSignal.throwIfAborted();
+      };
+      const scoped = origins.length
+        ? providers.fetchFor(origins, selected, assertSession)
+        : providers.manager.fetch;
+      const fetchScoped = fetchWithExpiry((input, init) => {
+        assertSession();
+        return scoped(input, init);
+      });
+      return async (input, init) => {
+        const body = init?.body;
+        const request = new Request(input, init);
+        // Durable generation reads detect another realm's logout even before its broadcast arrives.
+        await readIdentity();
+        assertSession();
+        return await fetchScoped(
+          new Request(request, { signal: AbortSignal.any([request.signal, sessionSignal]) }),
+          body instanceof Blob ? { body } : undefined,
+        );
+      };
     },
     identity: readIdentity,
     remembered: async () => {

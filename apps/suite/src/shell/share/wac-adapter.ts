@@ -3,6 +3,7 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, isContainerUrl, refuseRedirects } from "@jeswr/guarded-fetch";
 import { escapeIri, safeHttpIri } from "@jeswr/rdf-serialize";
+import { peopleWac, wacGroupIds } from "@jeswr/suite-groups";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { AclResource, Authorization } from "@solid/object";
@@ -107,7 +108,7 @@ export class WacSharingAdapter implements SharingAdapter {
       documents: [
         {
           model: "wac" as const,
-          dataset: doc.dataset,
+          dataset: peopleWac(doc.dataset),
           source: doc.source,
           governingResource: doc.resource,
           inherited: false,
@@ -123,7 +124,11 @@ export class WacSharingAdapter implements SharingAdapter {
   }
   private project(documents: LoadedDocument[]): SharingState {
     const current = readSharing(this.input(documents));
+    const groups = [
+      ...new Set(documents.flatMap((doc) => wacGroupIds(doc.dataset, doc.resource, doc.source))),
+    ];
     return {
+      ...(groups.length ? { groups } : {}),
       people: current.people.map(({ webId, role }) => ({ webId, role })),
       general:
         current.link === "none" ? { mode: "restricted" } : { mode: "link", role: current.link },
@@ -393,7 +398,7 @@ export class WacSharingAdapter implements SharingAdapter {
   private narrowLegacyAppend(doc: LoadedDocument): boolean {
     let changed = false;
     for (const auth of [...new AclResource(doc.dataset, DataFactory).authorizations]) {
-      const scoped = new ScopedAuthorization(auth as Term, doc.dataset, DataFactory);
+      let scoped = new ScopedAuthorization(auth as Term, doc.dataset, DataFactory);
       // Only Read/Append rules are legacy commenter shapes. Write already reaches members
       // as Append, and Control holders can rewrite this ACL; leave both unchanged.
       if (
@@ -402,9 +407,18 @@ export class WacSharingAdapter implements SharingAdapter {
         !["default", "defaultForNew"].some((p) => scoped.values(ACL + p).has(doc.resource))
       )
         continue;
+      // Group grants are edited separately. Keep their modes and scopes on the original rule.
+      if (scoped.values(`${ACL}agentGroup`).size) {
+        if (!scoped.agent.size && !scoped.agentClass.size) continue;
+        const people = this.copyAuthorization(scoped);
+        people.values(`${ACL}agentGroup`).clear();
+        scoped.values(`${ACL}agent`).clear();
+        scoped.values(`${ACL}agentClass`).clear();
+        scoped = people;
+      }
       // Split only the mode and target placement, retaining every principal and
       // unrelated scope. Never add a target when narrowing a defaults-only rule.
-      const append = this.copyAuthorization(auth);
+      const append = this.copyAuthorization(scoped);
       append.mode.clear();
       append.mode.add(`${ACL}Append`);
       append.values(`${ACL}default`).delete(doc.resource);

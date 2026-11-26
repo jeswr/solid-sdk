@@ -1,7 +1,7 @@
 /**
- * In-memory token store. Tokens are **never** written to localStorage,
- * sessionStorage, cookies, or the pod — a hard reload drops them and the user
- * simply re-connects (mirrors the Solid session model; AGENTS.md §Auth).
+ * Legacy in-memory token store. Access tokens are never persisted. Hosts may
+ * separately inject the encrypted refresh vault into the OAuth engine; no
+ * credentials enter localStorage, sessionStorage, cookies or the pod.
  */
 import type { TokenSet } from "./types.js";
 

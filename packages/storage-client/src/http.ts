@@ -252,22 +252,48 @@ function bodyFailure(url: string, signal: AbortSignal | undefined, cause: unknow
   });
 }
 
+export function readTooLarge(url: string, maxBytes: number): StorageError {
+  return new StorageError("payload-too-large", {
+    method: "GET",
+    url,
+    message: `GET ${url}: response exceeds maxBytes (${maxBytes})`,
+  });
+}
+
 /** Re-expose a response body so that transport failures surface as StorageError, not TypeError. */
 function mappedBody(
   body: ReadableStream<Uint8Array>,
   url: string,
   signal: AbortSignal | undefined,
+  maxBytes?: number,
 ): ReadableStream<Uint8Array> {
   const reader = body.getReader();
+  let size = 0;
   return new ReadableStream<Uint8Array>(
     {
       async pull(controller) {
+        const abort = () => void reader.cancel(signal?.reason).catch(() => undefined);
+        if (maxBytes !== undefined) signal?.addEventListener("abort", abort, { once: true });
         try {
+          if (maxBytes !== undefined) throwIfAborted("GET", url, signal);
           const chunk = await reader.read();
-          if (chunk.done) controller.close();
-          else controller.enqueue(chunk.value);
+          if (maxBytes !== undefined) throwIfAborted("GET", url, signal);
+          if (chunk.done) {
+            controller.close();
+            return;
+          }
+          size += chunk.value.byteLength;
+          if (maxBytes !== undefined && size > maxBytes) {
+            abort();
+            controller.error(readTooLarge(url, maxBytes));
+            return;
+          }
+          controller.enqueue(chunk.value);
         } catch (cause) {
+          if (maxBytes !== undefined) abort();
           controller.error(bodyFailure(url, signal, cause));
+        } finally {
+          signal?.removeEventListener("abort", abort);
         }
       },
       cancel: (reason) => reader.cancel(reason),
@@ -306,10 +332,12 @@ export function readResultFrom(
   url: string,
   shape: ReadShape,
   signal?: AbortSignal,
+  maxBytes?: number,
 ): ReadResult {
   const contentType = response.headers.get("content-type");
   if (!shape.withBody) discard(response.body);
-  const body = shape.withBody && response.body ? mappedBody(response.body, url, signal) : null;
+  const body =
+    shape.withBody && response.body ? mappedBody(response.body, url, signal, maxBytes) : null;
   let buffered: Promise<Uint8Array> | undefined;
   const bytes = async () => {
     buffered ??= collect(body);

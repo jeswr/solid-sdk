@@ -15,6 +15,7 @@ it.each([
   const root = `https://drive-sharing-${injected}.example/pod/`;
   const id = new URL("/storage", root).href;
   const endpoint = `${root}grants`;
+  const grant = `${root}grant-1`;
   let written: Record<string, unknown> | undefined;
   const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
     const url = String(input);
@@ -44,12 +45,19 @@ it.each([
       written = JSON.parse(String(init.body));
       return new Response(null, {
         status: 201,
-        headers: { location: `${root}grant-1`, etag: '"grant"' },
+        headers: { location: grant, etag: '"grant"' },
       });
     }
     expect(init?.method).toBe("HEAD");
+    const storageLink = `<${id}>; rel="https://www.w3.org/ns/lws#storage"`;
+    if (url === grant)
+      return new Response(null, {
+        headers: {
+          link: `${storageLink}, <${endpoint}>; rel="up", <https://www.w3.org/ns/lws#DataResource>; rel="type"`,
+        },
+      });
     return new Response(null, {
-      headers: { link: `<${id}>; rel="https://www.w3.org/ns/lws#storage", <${root}>; rel="up"` },
+      headers: { link: `${storageLink}, <${root}>; rel="up"` },
     });
   });
   const discovered = injected ? await createPodClient({ storage: root, fetch }) : undefined;
@@ -59,7 +67,11 @@ it.each([
     ...(discovered && { storage: discovered.storage, storageId: discovered.description.id }),
   });
   const shared = await drive.share(`${root}document`, { agent: { public: true }, modes: ["read"] });
-  expect(shared.id).toBe(`${root}grant-1`);
+  expect(shared.id).toBe(grant);
+  expect(fetch).toHaveBeenCalledWith(
+    grant,
+    expect.objectContaining({ method: "HEAD", cache: "no-cache" }),
+  );
   expect(written).toMatchObject({
     storage: id,
     access: [{ action: ["read"], target: { value: [`${root}document`] } }],

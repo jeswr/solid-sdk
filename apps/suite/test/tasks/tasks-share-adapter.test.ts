@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { addGrant, readGrants } from "@jeswr/pod-access/roles";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Parser, Store, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
@@ -90,6 +91,42 @@ const puts = (f: Awaited<ReturnType<typeof fixture>>) =>
   f.requests.filter((request) => request.init.method === "PUT");
 
 describe("Tasks named sharing", () => {
+  it("preserves group access on the tracker and task container across person edits", async () => {
+    const f = await fixture();
+    await f.adapter.setPerson(f.project.url, bob, "viewer");
+    const id = `${root}groups/family.ttl#this`;
+    for (const url of [f.project.url, f.folder]) {
+      const result = await addGrant(
+        [url],
+        { agent: { type: "group", id }, role: "editor", inherited: false, source: "" },
+        {
+          fetch: f.pod.fetch,
+          root,
+          webId: owner,
+          model: "wac",
+          kind: url.endsWith("/") ? "folder" : "resource",
+        },
+      );
+      expect(result.failed).toEqual([]);
+    }
+    expect((await f.load()).groups).toEqual([id]);
+    await f.adapter.setPerson(f.project.url, bob, "editor");
+    await f.adapter.setPerson(f.project.url, bob, "viewer");
+    await f.adapter.setPerson(f.project.url, bob, null);
+    for (const url of [f.project.url, f.folder]) {
+      const policy = await readGrants(url, {
+        fetch: f.pod.fetch,
+        root,
+        model: "wac",
+        kind: url.endsWith("/") ? "folder" : "resource",
+      });
+      expect(policy.grants).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ agent: { type: "group", id }, role: "editor" }),
+        ]),
+      );
+    }
+  });
   it("revokes an editor despite stray non-task and invalid-task Turtle documents", async () => {
     const f = await fixture();
     await f.adapter.setPerson(f.project.url, bob, "editor");

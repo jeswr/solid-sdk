@@ -1,5 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
-// Pod Manager reuses the shared pod-auth test double instead of keeping its own copy.
+// Pod Manager reuses app-session's shared PodAuth test double.
 export {
   deferred,
   fakePodAuth,

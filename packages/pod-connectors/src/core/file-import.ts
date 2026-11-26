@@ -119,8 +119,10 @@ export interface FileImportAdapter {
   importFile(file: ImportFile, ctx: FileImportContext): Promise<void | FileImportOutcome>;
 }
 
-export interface FileImportOutcome extends Pick<ImportOutcome, "skipped" | "cursor" | "warnings"> {
+export interface FileImportOutcome extends Pick<ImportOutcome, "skipped" | "cursor"> {
   readonly unsupported?: readonly string[];
+  /** Fixed diagnostics for bounded or partial file imports. */
+  readonly warnings?: readonly string[];
 }
 
 export interface RunFileImportOptions extends ConnectorStateOptions {

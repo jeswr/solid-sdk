@@ -67,6 +67,7 @@ All data and selected values are controlled props. Callbacks report user intent;
 never fetch, write permissions, resolve email remotely or compute protocol grants.
 
 `PeoplePicker` takes a contacts snapshot, query/value callbacks and a `useProfile(webId)` hook.
+Its optional `label` and `addLabel` props supply distinct input and action labels for group recipients.
 Pass the SDK hook from the consuming integration. Email entries resolve only against the supplied
 contacts; unresolved emails ask for an Account ID. Profile names override contact names and the
 Account ID remains visible. `RoleSelect.options` accepts a disabled flag and required reason per
@@ -344,6 +345,10 @@ removed, and remote image requests are suppressed. Object URLs are revoked on re
 and unmount. Supply blobs already read through the SDK; this package makes no network reads.
 The host owns preview navigation, metadata retrieval, headings and the enclosing dialog.
 
+`SafeMarkdown` provides the same safe rendering for app content. Its optional
+`linkTarget="_blank"` opens links with `rel="noopener noreferrer"` to protect unsaved work.
+Omitting `linkTarget` keeps ordinary link navigation, including in `PreviewPane`.
+
 All three accept `state` (`ready`, `loading`, `empty`, `filtered-empty` with `query`,
 `error` with a classified `SurfaceError`) and an `onAction` recovery callback. They do not
 classify SDK errors themselves. Error feedback keeps that callback available as Sign in
@@ -485,3 +490,31 @@ wraps such controls: transparent while online; offline it disables them and expl
 keyboard- and pointer-reachable tooltip (default `OFFLINE_REASON`, "You're offline. This needs a
 connection."). Its trigger is a span, so it stays focusable inside a disabled fieldset. `ConflictDialog` calls `onChoose`
 with `mine`, `theirs` or `both`; the caller applies the choice and controls when it closes.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+### Smart chips
+
+`Chip` renders a `ChipRef` with its kind icon, resolves live metadata through an injected
+callback, and exposes a hover/focus card with owner and an Open link. Unreadable references
+keep their stored label and link directly to the IRI with a lock icon. `ChipPicker` supplies
+a debounced combobox/listbox with arrows, Enter, Escape, composition handling and cancelled
+search fencing. Import the existing components stylesheet; both components use suite tokens.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Import chip UI from `@jeswr/suite-ui/chips`: `Chip`, `ChipPicker`, `ChipTextarea`,
+`ChipPickerAnchor`, `ChipText` and `ChipEditorTools`. This subpath imports only the SDK's dependency-free
+`chips/core` leaf; the root UI barrel does not load chip code. Pass a `search(query, signal)`
+callback to composers. Rich editors provide a `ChipEditorAdapter` for query/subscription,
+focus and insertion. `Chip` defers metadata until hover/focus unless `resolveOnMount` is
+explicitly set for an own-pod resource. Textarea blur handlers always run; Escape restores
+composer focus, while Tab or outside focus closes the picker without refocusing.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+### Template gallery
+
+`TemplateGallery` presents built-in and pod templates in a responsive dialog. Pass
+`items`, `onChoose`, `open` and `onOpenChange`; each item has `id`, `name`, `category`,
+`source` (`builtin` or `user`) and optional description, app and preview. Category and
+source filters, native buttons, arrow/Home/End navigation, loading/error/retry states
+and optional `onDelete` are included. `busy` disables choices and dismissal while the
+caller creates an item. Load `styles/components.css` for token-based light/dark styles.

@@ -4,3 +4,10 @@ export { createNotifications } from "./client.js";
 export type * from "./types.js";
 export type { Invalidation, InvalidationWatch, WatchInvalidationsOptions } from "./watch.js";
 export { watchInvalidations } from "./watch.js";
+export type {
+  WebhookSubscriptionRequest,
+  WebhookSubscriptions,
+  WebhookTopic,
+} from "./webhook-subscriptions.js";
+// AUTHORED-BY Codex GPT-6
+export { createWebhookSubscriptions } from "./webhook-subscriptions.js";

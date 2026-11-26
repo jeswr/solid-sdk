@@ -14,9 +14,10 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { isAuxiliaryResource } from "./auxiliary.js";
 import { StorageError, type StorageErrorCode, storageErrorFrom } from "./errors.js";
 import { exactCreateSegment } from "./exact-create.js";
-import { discard, scoped, send } from "./http.js";
+import { discard, linksOf, scoped, send } from "./http.js";
 import { pathParent, throwIfAborted } from "./internal.js";
 import { serializeQuads, WRITABLE_RDF } from "./rdf.js";
 import { isTrashEndpoint, postTrash } from "./services.js";
@@ -450,13 +451,43 @@ export function solidWrites(
       let dest: string;
       try {
         dest = target("POST", new URL(location, parent).href);
-        if (pathParent(dest, root) !== parent || dest.endsWith("/") !== (kind === "container"))
+        if (
+          pathParent(dest, root) !== parent ||
+          dest.endsWith("/") !== (kind === "container") ||
+          isAuxiliaryResource(dest, {
+            url: parent,
+            links: linksOf(response, parent, "POST"),
+            metadataUrl: null,
+            contentType: null,
+          })
+        )
           throw new TypeError("Invalid Location child or kind");
       } catch {
         // URL parsing and scope errors can carry the raw Location, including credentials.
         throw error("invalid-response", "POST", parent, "Invalid Location");
       }
-      return result(dest, response, opts.signal);
+      let head: ReadResult;
+      try {
+        head = await client().head(dest, { signal: opts.signal, revalidate: true });
+        throwIfAborted("POST", parent, opts.signal);
+      } catch {
+        throwIfAborted("POST", parent, opts.signal);
+        throw error("invalid-response", "POST", parent, "Could not verify created Location");
+      }
+      if (head.kind !== kind || isAuxiliaryResource(dest, head))
+        throw error("invalid-response", "POST", parent, "Could not verify created Location");
+      const own = response.headers.get("etag");
+      const observed = options.etagFollowUp === false ? null : head.etag;
+      return {
+        url: dest,
+        etag: own ?? observed,
+        created: response.status === 201,
+        ...(own !== null
+          ? { etagSource: "response" as const }
+          : observed !== null
+            ? { etagSource: "follow-up" as const }
+            : {}),
+      };
     },
     async patch(url, patch, opts) {
       const dest = target("PATCH", url);

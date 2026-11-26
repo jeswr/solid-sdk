@@ -3,6 +3,7 @@ name: suite-native
 description: Use when working on @jeswr/suite-native, the Solid Suite's native-app seams (system-browser Solid-OIDC code driver, share sheet in/out, refresh-token secure store, mobile Client ID Document) used by the Capacitor shells in apps/mobile.
 ---
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/suite-native
 
@@ -112,3 +113,62 @@ Read `solid-suite-planning/specs/mobile/P4-SECURE-STORE.md` completely before ch
   Store only refresh tokens. Gate them when user presence is supported and unlock is enabled.
 - Keep the root pure and `secureStorePlugin` in `./capacitor`. There is no web fallback;
   off native, keep IndexedDB. pod-auth wiring belongs to MOB-06 after T-031 lands.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Predecessor-session notice (MOB-P3d)
+
+- `createSecureStore(plugin).takeMigrationNotice()` returns `Promise<boolean>`. Native
+  `SuiteSecureStore.takeMigrationNotice()` takes no arguments and returns exactly
+  `{ signInAgain: boolean }`, atomically consuming the pending notice. Validate the exact shape
+  and map failures through `SecureStoreError`; never expose origin, namespace, key or value.
+- Consume only on the native sign-in surface that can display “Sign in again to continue”.
+  No web fallback. Remote shells return false. This method cannot perform migration.
+- Migration stays native, before bridge startup, scoped to the complete validated
+  `build-info.json.predecessorOrigins` plan. Check every artifact even with completion markers,
+  persist notice intent before deletion, and preserve the current namespace and share inbox.
+  Keep JVM/XCTest isolation, interruption and malformed-plan tests with changes to this seam.
+
+- Use the pure root export `validatePredecessorOrigins(value)` for JavaScript migration-plan
+  validation. It returns `{ valid: true, origins: string[] }` or
+  `{ valid: false, reason: "list" | "origin" }`. Reject non-arrays, lists over 32 entries,
+  non-string or non-canonical HTTPS origins, credentials, port zero, `localhost` and `.localhost`
+  subdomains. Non-default ports 1–65535 are valid; explicit `:443` is non-canonical. Empty lists
+  are valid. Preserve order and duplicates; callers apply their own duplicate policy only after
+  the complete plan passes. Keep exhaustive shared-rule tests here and thin caller wiring tests.
+- Node build scripts import `@jeswr/suite-native` through compiled `dist/index.js`, never source
+  paths. Both apps already declare `workspace:*`; build their dependencies first with
+  `pnpm turbo run build --filter=@jeswr/app-suite^... --filter=@jeswr/app-mobile^...`.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Push registrar (MOB-P2d)
+
+Read `P2-PUSH-RELAY.md` P2–P4, P7 and P11–P13 completely before changing `./push`.
+The README documents the injected API. Keep `createPush`/`createPushRegistrar` pure and the
+`SuitePush` binding in `./capacitor`; web code loads that binding lazily only after native detection.
+
+- Validate both bridge directions, exact fields, bounded canonical base64url, public on-curve
+  P-256 keys, IDs, 16-topic limits, and `/notifications` or `/chat/<base64url-id>` routes.
+  Never expose native errors, device keys, tokens or push payloads in diagnostics.
+- One registrar owns one installation, up to four account/storage registrations. Every creation
+  or change uses the account's `podAuth.fetchFor(account,{extraResourceOrigins:[RELAY_ORIGIN]})`.
+  The build fixes that HTTPS origin; nothing discovered at runtime may expand it.
+- Sign exact UTF-8 JSON bytes through native `sign`; never read credentials. Device proofs bind
+  every mutation. Cleanup uses a pristine tokenless transport and device proofs, with ten-second
+  operation budgets, manual/error redirects and bounded streamed response reads.
+- Persist the installation ID immediately, then complete the native challenge before maps become
+  live. PATCH token/keys on resume; only acknowledge the token in `setTopicMap` after activation.
+  `registrationStale` is cleared by that acknowledgement, never by merely obtaining an OS token.
+- Create registration with empty topics to obtain its secret inbox, then let the app create pod
+  subscriptions and PUT their channel/sender/actual expiry. Ask seven days, renew below two days,
+  refresh relay registrations every resume, retain replaced channels for deletion retries, and
+  reschedule `scheduleRenewalReminder` from the earliest non-removing unexpired topic.
+- Removal aborts/fences in-flight work for that account and silences locally before network I/O.
+  Keep failed cleanup metadata, keys and maps for retry; delete native data only after all remote
+  cleanup succeeds. A last-registration deletion atomically removes the installation at the relay,
+  so tokenless cleanup treats 404 as success. Never silence another account when removing one.
+- Store metadata privately through the app's injected store; never persist keys or OS tokens in
+  the WebView. Secret inbox URLs stay out of logs. Validate restored state against the same relay.
+- `consumeLaunchRoute` unwraps native's envelope. Resolve the registration's signed-in account and
+  switch it before navigation. Unknown/signed-out registrations drop their route for `/notifications`.
+
+Retain 100% coverage with adversarial argument, response, renewal, cancellation and cleanup tests.

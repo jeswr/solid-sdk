@@ -26,6 +26,7 @@ const adaptations = [
   "app sessions follow the native shell account, with signed-out fallback outside the shell",
   "shell demo account disabled; demo-pod modules replaced by inert stand-ins",
   "Drive preview interception uses the plain /drive/p/[ref] route on native",
+  "Univer hyphenation patterns for languages other than en-us are excluded (auto-hyphenation is never enabled)",
 ];
 await rm(stage, { recursive: true, force: true });
 await rm(www, { recursive: true, force: true });
@@ -187,6 +188,7 @@ await new Promise((resolve, reject) => {
         NEXT_PUBLIC_APP_BASE_URL: info.appBaseUrl,
         NEXT_PUBLIC_PUBLIC_SUITE_URL: info.publicSuiteUrl,
         NEXT_PUBLIC_CLIENT_ID_URL: info.clientIdUrl,
+        NEXT_PUBLIC_PUSH_RELAY_URL: info.pushRelayUrl ?? "",
         // The demo pod is web-only; staging replaces it with inert stand-ins.
         NEXT_PUBLIC_SUITE_DEMO: "0",
         NEXT_TELEMETRY_DISABLED: "1",

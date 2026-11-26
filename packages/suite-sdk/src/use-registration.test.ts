@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { AuthEvent, AuthEventType, Identity, PodAuth } from "@jeswr/pod-auth";
 import { PodAuthProvider } from "@jeswr/pod-auth/react";
 import { act, createElement, StrictMode, Suspense, startTransition, useLayoutEffect } from "react";
@@ -46,6 +47,7 @@ function fixture() {
   });
   const auth: PodAuth = {
     fetch: profile,
+    fetchFor: () => profile,
     login,
     restore: async () => current,
     identity: async () => current,

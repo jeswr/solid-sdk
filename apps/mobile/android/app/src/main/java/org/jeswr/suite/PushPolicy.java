@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 package org.jeswr.suite;
 
 import java.nio.ByteBuffer;
@@ -12,6 +13,17 @@ import java.util.Set;
 /** Validation and display decisions shared by the bridge, service and notification tap path. */
 final class PushPolicy {
     static final String GENERIC = "You have new activity";
+    static final String RENEWAL = "Open Solid Suite to keep notifications on";
+    /** Bridge numbers are epoch milliseconds, not strings, floats, booleans or unsafe integers. */
+    static Long renewalExpiry(Object value, long now) {
+        if (value == null) return null;
+        if (!(value instanceof Long) || (Long) value <= now || (Long) value > 9007199254740991L)
+            throw new IllegalArgumentException("Invalid renewal expiry");
+        return (Long) value;
+    }
+    static long renewalTrigger(long expiry, long now) {
+        return Math.max(now + 1000, expiry - 86400000L);
+    }
     static boolean route(String value) {
         return value != null && value.length() <= 512 && !value.contains("..") && !value.equals("/chat/.")
             && (value.equals("/notifications") || value.matches("/chat/[A-Za-z0-9_.~-]+"));

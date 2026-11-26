@@ -7,6 +7,7 @@ import { createFetchPodWriter } from "../core/pod-writer.js";
 import {
   createMemoryPod,
   demoImport,
+  ownerOnlyFixtureChecks,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
   TEST_WEBID,
@@ -55,6 +56,7 @@ async function expectFailure(
         profileDocumentUrl: TEST_PROFILE_DOC,
         podRoot: TEST_POD_ROOT,
         fetch: pod.fetch,
+        ...ownerOnlyFixtureChecks,
       }),
     }),
   ).rejects.toThrow(error);

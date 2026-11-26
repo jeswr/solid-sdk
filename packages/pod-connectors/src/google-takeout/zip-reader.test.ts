@@ -501,12 +501,12 @@ it.each([
 ])("rejects unsafe ZIP name before dispatch: %j", async (name) => {
   const file = memory(zipSync({ [name]: strToU8("untrusted") }));
   const entries = await zipDirectory(file);
-  expect(entries[0]?.invalid).toBe("invalid-entry");
+  expect(entries[0]?.invalid).toBe("unsafe-entry-path");
   const entry = vi.fn(discard),
     skip = vi.fn();
   await readZip(file, { entry, skip }, entries);
   expect(entry).not.toHaveBeenCalled();
-  expect(skip).toHaveBeenCalledWith(name, "invalid-entry");
+  expect(skip).toHaveBeenCalledWith(name, "unsafe-entry-path");
 });
 
 it("accepts undecodable percent escapes and 16 components below Takeout/", async () => {
@@ -517,7 +517,7 @@ it("accepts undecodable percent escapes and 16 components below Takeout/", async
   expect(entries.map((entry) => entry.invalid)).toEqual([undefined, undefined]);
   const tooDeep = `${deep}/x`;
   const rejected = await zipDirectory(memory(zipSync({ [tooDeep]: strToU8("c") })));
-  expect(rejected[0]?.invalid).toBe("invalid-entry");
+  expect(rejected[0]?.invalid).toBe("unsafe-entry-path");
 });
 
 it("retains safe Unicode and percent-encoded filenames and directory entries", async () => {

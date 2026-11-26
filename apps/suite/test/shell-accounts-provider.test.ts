@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AccountsProvider, useAccounts } from "../src/shell/session/accounts-provider";
+import { onBeforeSignOut } from "../src/shell/session/sign-out-cleanup";
 import type { SessionBackend, SuiteAccount } from "../src/shell/session/types";
 import { OfflineProvider } from "../src/shell/sync/offline-provider";
 import { act, h, mount } from "./drive-ui-dom";
@@ -85,6 +87,117 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
+it("uses the requested Solid session even when the selected account has expired", async () => {
+  const expired = { ...two, kind: "solid" as const };
+  localStorage.setItem(
+    "suite.accounts.v1",
+    JSON.stringify({ activeId: one.id, accounts: [one, expired] }),
+  );
+  const live = backend(one);
+  const response = new Response(null, { status: 204 });
+  const transport = vi.fn<typeof fetch>().mockResolvedValue(response);
+  const bindFetch = vi.spyOn(live, "fetchFor").mockReturnValue(transport);
+  await mount(h(AccountsProvider, { backends: [live], children: h(Probe) }));
+  const { fetchFor } = accounts;
+  if (!fetchFor) throw new Error("Missing account-bound fetch");
+
+  await act(() => accounts.switchTo(expired.id));
+  expect(accounts.status).toBe("expired");
+  expect(accounts.active).toEqual(expired);
+  expect(() => fetchFor(expired)).toThrow("Sign in to continue");
+  await expect(accounts.fetch(expired.storageUrl)).rejects.toThrow("Sign in to continue");
+
+  const relay = "https://relay.example";
+  const renewal = `${relay}/push/registrations/one`;
+  const options = { extraResourceOrigins: [relay] };
+  expect(await fetchFor(one, options)(renewal, { method: "PUT" })).toBe(response);
+
+  const checkRetirement = vi.fn(async () => {
+    expect(() => fetchFor(one, options)).toThrow("Sign in to continue");
+  });
+  const stop = onBeforeSignOut(checkRetirement);
+  try {
+    await act(() => accounts.signOut(one.id));
+    expect(checkRetirement).toHaveBeenCalledOnce();
+    expect(() => fetchFor(one, options)).toThrow("Sign in to continue");
+  } finally {
+    stop();
+  }
+  expect(bindFetch).toHaveBeenCalledExactlyOnceWith(one, options);
+  expect(transport).toHaveBeenCalledExactlyOnceWith(renewal, { method: "PUT" });
+});
+
+it.each([
+  "signOut",
+  "signOutAll",
+] as const)("silences push before %s revokes credentials and fences sign-in during cleanup", async (action) => {
+  const first = backend(one);
+  const second = backend(two);
+  const podFetch = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+  const bindFetch = vi.spyOn(first, "fetchFor");
+  bindFetch.mockReturnValueOnce(fetch).mockReturnValue(podFetch);
+  await mount(h(AccountsProvider, { backends: [first, second], children: h(Probe) }));
+  const order: string[] = [];
+  let finish = () => {};
+  const cleanup = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  let cleanupFetch: typeof fetch | undefined;
+  const stop = onBeforeSignOut(async (account, fetchPod) => {
+    if (account.id === one.id) cleanupFetch = fetchPod;
+    order.push(`silence:${account.id}`);
+    await cleanup;
+  });
+  vi.mocked(first.signOut).mockImplementation(async () => {
+    order.push("revoke:one");
+  });
+  let pending = Promise.resolve();
+  expect(accounts.fetchFor?.(one)).toBe(fetch);
+  try {
+    await act(() => {
+      pending = accounts[action]();
+    });
+    expect(order[0]).toBe("silence:one");
+    expect(first.signOut).not.toHaveBeenCalled();
+    expect(accounts.isActiveAccount("one")).toBe(false);
+    // No account-bound fetch can be minted while beforeSignOut is still pending.
+    expect(() => accounts.fetchFor?.(one)).toThrow("Sign in to continue");
+    await expect(accounts.fetch(one.storageUrl)).rejects.toThrow("Sign in to continue");
+    if (!cleanupFetch) throw new Error("Missing sign-out cleanup fetch");
+    await expect(cleanupFetch(two.storageUrl)).rejects.toThrow();
+    await expect(cleanupFetch(one.storageUrl, { method: "POST" })).rejects.toThrow();
+    await expect(cleanupFetch(one.storageUrl, { method: "DELETE" })).rejects.toThrow();
+    const sibling = new URL("/another-pod/file", one.storageUrl).href;
+    await expect(cleanupFetch(sibling, { method: "DELETE" })).rejects.toThrow();
+    expect(podFetch).not.toHaveBeenCalled();
+    const channel = new URL("/.notifications/one", one.storageUrl).href;
+    expect((await cleanupFetch(channel, { method: "DELETE" })).status).toBe(204);
+    const request = podFetch.mock.calls[0]?.[0];
+    expect(request).toMatchObject({
+      url: channel,
+      method: "DELETE",
+      credentials: "omit",
+      redirect: "error",
+    });
+    expect(bindFetch).toHaveBeenLastCalledWith(one);
+    if (action === "signOutAll")
+      expect(() => accounts.fetchFor?.(two)).toThrow("Sign in to continue");
+    else expect(accounts.fetchFor?.(two)).toBe(fetch);
+    await expect(accounts.signIn({ issuer: "https://id.example" })).rejects.toThrow("in progress");
+    await act(async () => {
+      finish();
+      await pending;
+    });
+    expect(order.indexOf("revoke:one")).toBeGreaterThan(order.indexOf("silence:one"));
+    await expect(cleanupFetch(channel, { method: "DELETE" })).rejects.toThrow();
+    expect(podFetch).toHaveBeenCalledOnce();
+  } finally {
+    stop();
+    finish();
+    await pending;
+  }
+});
+
 it("removes only the signed-out account's history and retains its pending outbox even if logout fails", async () => {
   const first = backend(one);
   const failure = vi.spyOn(first, "signOut").mockRejectedValue(new Error("provider unavailable"));
@@ -99,6 +212,67 @@ it("removes only the signed-out account's history and retains its pending outbox
   expect(localStorage.getItem("suite.recent.v1.one")).toBeNull();
   expect(localStorage.getItem("suite.recent.v1.two")).toBe("[]");
   expect(localStorage.getItem("suite.outbox.v1.one")).toBe(outbox);
+});
+
+it.each([
+  "signOut",
+  "signOutAll",
+] as const)("completes %s and revocation after rejecting push cleanup, retaining retry metadata", async (action) => {
+  const first = backend(one);
+  const second = backend(two);
+  await mount(h(AccountsProvider, { backends: [first, second], children: h(Probe) }));
+  const failure = new Error("Push cleanup pending");
+  const retry = { registrationId: "registration", removing: true, topics: ["inbox"] };
+  localStorage.setItem("suite.push.v1.https://relay.example", JSON.stringify(retry));
+  const cleanup = vi.fn(async (account: SuiteAccount) => {
+    expect(accounts.isSignedInAccount?.(account.id)).toBe(false);
+    if (account.id === one.id) throw failure;
+  });
+  const stop = onBeforeSignOut(cleanup);
+  try {
+    await act(async () => {
+      await expect(accounts[action]()).rejects.toBe(failure);
+    });
+    expect(first.signOut).toHaveBeenCalledExactlyOnceWith(one);
+    expect(accounts.isSignedInAccount?.(one.id)).toBe(false);
+    expect(localStorage.getItem("suite.recent.v1.one")).toBeNull();
+    expect(accounts.accounts).toEqual(action === "signOut" ? [two] : []);
+    expect(accounts.status).toBe(action === "signOut" ? "ready" : "signed-out");
+    if (action === "signOutAll") {
+      expect(second.signOut).toHaveBeenCalledExactlyOnceWith(two);
+      expect(cleanup).toHaveBeenCalledTimes(2);
+    }
+    expect(JSON.parse(localStorage.getItem("suite.push.v1.https://relay.example")!)).toEqual(retry);
+    expect(() => accounts.fetchFor?.(one)).toThrow("Sign in");
+  } finally {
+    stop();
+  }
+});
+
+it.each([
+  "signOut",
+  "signOutAll",
+] as const)("reports push and credential failures after %s completes", async (action) => {
+  const first = backend(one);
+  const second = backend(two);
+  const pushError = new Error("Push cleanup pending");
+  const credentialError = new Error("Revocation failed");
+  vi.mocked(first.signOut).mockRejectedValue(credentialError);
+  await mount(h(AccountsProvider, { backends: [first, second], children: h(Probe) }));
+  const stop = onBeforeSignOut(async (account) => {
+    if (account.id === one.id) throw pushError;
+  });
+  try {
+    await act(async () => {
+      await expect(accounts[action]()).rejects.toMatchObject({
+        errors: [pushError, credentialError],
+      });
+    });
+    if (action === "signOutAll") expect(second.signOut).toHaveBeenCalledWith(two);
+    expect(accounts.accounts).toEqual(action === "signOut" ? [two] : []);
+  } finally {
+    stop();
+  }
 });
 
 it("clears every recent-items key on sign-out-all while preserving unsent changes", async () => {

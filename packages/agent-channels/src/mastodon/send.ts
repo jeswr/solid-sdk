@@ -22,6 +22,7 @@ import type {
   RenderableProposal,
   Wire,
 } from "../types.js";
+import { preview } from "./preview.js";
 import {
   DEFAULT_INSTANCE,
   id,
@@ -145,6 +146,7 @@ export function createMastodonSend(
   }
   return {
     render,
+    preview,
     async validate(wire, proposal, context) {
       try {
         const actual = snapshot(wire);

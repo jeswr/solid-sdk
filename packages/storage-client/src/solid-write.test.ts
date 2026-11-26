@@ -552,6 +552,7 @@ describe("create (CSS fixtures)", () => {
     expect(calls[0]?.body).toBe("");
     const folder = backend({
       [`POST ${NOTES}`]: response(201, { location: `${NOTES}generated/`, etag: '"folder"' }),
+      [`HEAD ${NOTES}generated/`]: response(200),
     });
     await folder.storage.create(NOTES, null, { kind: "container" });
     expect(folder.calls[0]?.headers.get("link")).toBe(
@@ -570,6 +571,7 @@ describe("create (CSS fixtures)", () => {
     "file#",
     "file?x",
     "wrong/",
+    "policy.%61cl",
     NOTES,
     "http://[",
   ])("refuses unsafe resource Location %s without fetching it", async (location) => {
@@ -2605,5 +2607,40 @@ describe("round-4 write regressions", () => {
     const statement = quad(variable("s"), variable("p"), variable("o"));
     const body = await buildN3Patch(n3([statement], [statement], [statement]));
     expect(body.match(/\?s \?p \?o \./g)).toHaveLength(3);
+  });
+});
+
+describe("verifying server-assigned Solid destinations", () => {
+  test.each([
+    { link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"' },
+    { link: `<${NOTES}>; rel="describes"` },
+    null,
+  ])("refuses unverifiable HEAD metadata even with a create ETag (%j)", async (headers) => {
+    const dest = `${NOTES}generated.ttl`;
+    const { storage, calls } = backend({
+      [`HEAD ${dest}`]: headers === null ? response(404) : response(200, headers),
+    });
+    await rejection(storage.create(NOTES, "", { contentType: "text/plain" }), "invalid-response");
+    expect(calls.map(({ method, url }) => [method, url])).toEqual([
+      ["POST", NOTES],
+      ["HEAD", dest],
+    ]);
+  });
+
+  test.each([true, false])("checks the Location with etagFollowUp=%s", async (etagFollowUp) => {
+    const dest = `${NOTES}generated.ttl`;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) =>
+      init?.method === "POST"
+        ? new Response(null, { status: 201, headers: { location: dest } })
+        : new Response(null, { headers: { etag: '"observed"' } }),
+    );
+    const storage = createSolidBackend({ root: ROOT, fetch, etagFollowUp });
+    const created = await storage.create(NOTES, "", { contentType: "text/plain" });
+    expect(created).toEqual(
+      etagFollowUp
+        ? { url: dest, created: true, etag: '"observed"', etagSource: "follow-up" }
+        : { url: dest, created: true, etag: null },
+    );
+    expect(fetch.mock.calls.map(([, init]) => init?.method)).toEqual(["POST", "HEAD"]);
   });
 });

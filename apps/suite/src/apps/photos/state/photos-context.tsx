@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { toast, type UploadItem } from "@jeswr/suite-ui";
 import {
@@ -12,8 +13,10 @@ import {
   useState,
 } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
+import { groupDirectory } from "../../../shell/groups/client";
 import { ensureSample } from "../demo/sample";
 import { browserEncoder, LocationStripError } from "../lib/browser/encoder";
+import { shareAddedPhotos } from "../lib/data/album-groups";
 import {
   changeMembers,
   createAlbum,
@@ -182,6 +185,25 @@ function usePhotosState(session: PodSession) {
     },
     [redraw, refresh],
   );
+  /** Groups the album is shared with get Viewer access to the photos added to it. */
+  const shareWithAlbumGroups = useCallback(
+    async (album: string, refs: string[]) => {
+      let directory: Awaited<ReturnType<typeof groupDirectory>>;
+      try {
+        directory = await groupDirectory(session);
+      } catch {
+        return; // Group sharing is WAC-only; elsewhere no group can hold the album.
+      }
+      try {
+        await shareAddedPhotos(directory, io, album, refs);
+      } catch {
+        toast.warning(
+          "Photos added. Groups sharing this album may not see them yet; add them again to retry.",
+        );
+      }
+    },
+    [session, io],
+  );
   const editAlbum = useCallback(
     (url: string, transform: (album: StoredAlbum) => StoredAlbum, message = "Album saved") => {
       const patch: Patch = (state) => ({
@@ -189,7 +211,15 @@ function usePhotosState(session: PodSession) {
         albums: state.albums.map((album) => (album.url === url ? transform(album) : album)),
       });
       return run(patch, async () => {
-        const saved = await writeAlbum.edit(url, transform);
+        // Only refs THIS edit's transform added: members someone else (e.g. a group Editor)
+        // wrote to the album in the meantime must never be extended to the album's groups.
+        let added: string[] = [];
+        const saved = await writeAlbum.edit(url, (fresh) => {
+          const changed = transform(fresh);
+          added = changed.members.filter((member) => !fresh.members.includes(member));
+          return changed;
+        });
+        if (added.length) await shareWithAlbumGroups(url, added);
         announce(message);
         return (state) => ({
           ...state,
@@ -197,7 +227,7 @@ function usePhotosState(session: PodSession) {
         });
       });
     },
-    [writeAlbum, run],
+    [writeAlbum, run, shareWithAlbumGroups],
   );
   const newAlbum = useCallback(
     (name: string, refs: string[] = []) => {

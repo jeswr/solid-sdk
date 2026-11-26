@@ -1,11 +1,19 @@
 // AUTHORED-BY Codex GPT-6
-import { ownerPolicy, writeWac } from "@jeswr/pod-access";
-import type { StorageClient } from "@jeswr/storage-client";
+import {
+  ownerPolicy,
+  createOwnerOnlyDestinationChecks as podAccessChecks,
+  createOwnerOnlyDestinationVerifier as podAccessVerifier,
+  writeWac,
+} from "@jeswr/pod-access";
 import { Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { bankStatementsFileAdapter } from "../bank-statements/file-adapter.js";
 import { MONZO } from "../bank-statements/fixtures.js";
 import { garminAdapter } from "../garmin/adapter.js";
+import {
+  createOwnerOnlyDestinationChecks as publicChecks,
+  createOwnerOnlyDestinationVerifier as publicVerifier,
+} from "../index.js";
 import { whoopAdapter } from "../whoop/adapter.js";
 import { runFileImport } from "./file-import.js";
 import { runImport } from "./import-runner.js";
@@ -391,7 +399,7 @@ it.each([
   expect(onState).not.toHaveBeenCalled();
 });
 
-describe("owner-only destination verifier", () => {
+describe("private writer confirmation", () => {
   const root = TEST_POD_ROOT;
   const parent = `${root}integrations/`;
   const container = `${parent}bank-statements/`;
@@ -409,18 +417,13 @@ describe("owner-only destination verifier", () => {
       return (await override?.(String(input), init)) ?? pod.fetch(input, init);
     });
     const storage = createWacImportStorage({ root, fetch });
-    const openStorage = vi.fn(() => storage);
-    const checks = createOwnerOnlyDestinationChecks({ podRoot: root, ownerWebId, openStorage });
+    const checks = createOwnerOnlyDestinationChecks({
+      podRoot: root,
+      ownerWebId,
+      openStorage: () => storage,
+    });
     const requests = () => fetch.mock.calls.map(([url, init]) => `${init?.method ?? "GET"} ${url}`);
-    return {
-      pod,
-      fetch,
-      storage,
-      openStorage,
-      verify: checks.verifyPrivateDestination,
-      checks,
-      requests,
-    };
+    return { pod, fetch, storage, checks, requests };
   }
 
   async function seedPublicRead(fetch: typeof globalThis.fetch, url: string, members: boolean) {
@@ -433,114 +436,6 @@ describe("owner-only destination verifier", () => {
       body: await writeWac(policy, url, `${url}.acl`),
     });
   }
-
-  it("reads the public parent policy before refusing to create its child", async () => {
-    const { pod, verify, requests } = fixture();
-    await seedPublicRead(pod.fetch, parent, true);
-    expect(await verify(target)).toBe(false);
-    expect(requests()).toEqual([
-      `HEAD ${container}`,
-      `HEAD ${parent}`,
-      `HEAD ${parent}`,
-      `HEAD ${parent}.acl`,
-      `GET ${parent}.acl`,
-    ]);
-  });
-
-  it("stops at an unreadable ACL without attempting to create anything", async () => {
-    const { verify, requests } = fixture((url) =>
-      url === `${root}.acl` ? new Response(null, { status: 403 }) : undefined,
-    );
-    expect(await verify(target)).toBe(false);
-    expect(requests()).toEqual([
-      `HEAD ${container}`,
-      `HEAD ${parent}`,
-      `HEAD ${root}`,
-      `HEAD ${root}`,
-      `HEAD ${root}.acl`,
-    ]);
-  });
-
-  it("creates missing containers at their exact URLs, verifying each before proceeding", async () => {
-    const { fetch, verify, requests, openStorage } = fixture();
-    expect(await verify(target)).toBe(true);
-    expect(requests()).toEqual([
-      `HEAD ${container}`,
-      `HEAD ${parent}`,
-      `HEAD ${root}`,
-      `HEAD ${root}`,
-      `HEAD ${root}.acl`,
-      `GET ${root}.acl`,
-      `PUT ${parent}`,
-      `HEAD ${parent}`,
-      `HEAD ${parent}.acl`,
-      `HEAD ${root}`,
-      `HEAD ${root}.acl`,
-      `GET ${root}.acl`,
-      `PUT ${container}`,
-      `HEAD ${container}`,
-      `HEAD ${container}.acl`,
-      `HEAD ${parent}`,
-      `HEAD ${parent}.acl`,
-      `HEAD ${root}`,
-      `HEAD ${root}.acl`,
-      `GET ${root}.acl`,
-      `HEAD ${target}`,
-    ]);
-    for (const [, init] of fetch.mock.calls.filter(([, init]) => init?.method === "PUT")) {
-      expect(new Headers(init?.headers).get("if-none-match")).toBe("*");
-      expect(new Headers(init?.headers).get("link")).toContain("ldp#BasicContainer");
-      expect(init?.body).toBe("");
-    }
-    expect(await verify(`${container}other.ttl`)).toBe(true);
-    expect(openStorage).toHaveBeenCalledTimes(1);
-    expect(requests().filter((request) => request.startsWith("PUT "))).toHaveLength(2);
-  });
-
-  it.each([
-    "owner-only",
-    "public",
-  ])("checks the resulting %s container after a concurrent create", async (access) => {
-    const { pod, verify, requests } = fixture(async (url, init) => {
-      if (url !== container || init?.method !== "PUT") return;
-      await pod.fetch(url, init);
-      if (access === "public") await seedPublicRead(pod.fetch, container, true);
-      return new Response(null, { status: 412 });
-    });
-    expect(await verify(target)).toBe(access === "owner-only");
-    const recorded = requests();
-    const afterCreate = recorded.slice(recorded.indexOf(`PUT ${container}`) + 1);
-    expect(afterCreate.slice(0, 2)).toEqual([`HEAD ${container}`, `HEAD ${container}.acl`]);
-    expect(afterCreate.slice(-2)).toEqual(
-      access === "public"
-        ? [`HEAD ${container}.acl`, `GET ${container}.acl`]
-        : [`GET ${root}.acl`, `HEAD ${target}`],
-    );
-  });
-
-  it("refuses errors other than a precondition conflict during creation", async () => {
-    const { verify, requests } = fixture((url, init) =>
-      url === parent && init?.method === "PUT" ? new Response(null, { status: 403 }) : undefined,
-    );
-    await expect(verify(target)).rejects.toMatchObject({ status: 403 });
-    expect(requests().at(-1)).toBe(`PUT ${parent}`);
-    expect(requests()).not.toContain(`PUT ${container}`);
-  });
-
-  it("checks an existing resource's policy even with owner-only member defaults", async () => {
-    const { pod, verify, requests } = fixture();
-    await pod.fetch(target, { method: "PUT", body: "" });
-    await seedPublicRead(pod.fetch, target, false);
-    expect(await verify(target)).toBe(false);
-    expect(requests().slice(-4)).toEqual([
-      `HEAD ${target}`,
-      `HEAD ${target}`,
-      `HEAD ${target}.acl`,
-      `GET ${target}.acl`,
-    ]);
-    expect(requests()).toContain(`GET ${root}.acl`);
-    expect(requests().every((request) => !request.startsWith("PUT "))).toBe(true);
-  });
 
   it.each([
     "planted ACL",
@@ -814,24 +709,6 @@ describe("owner-only destination verifier", () => {
     expect(pod.get(payload)).toBeDefined();
   });
 
-  it("refuses confirmation when the version changes during otherwise successful policy reads", async () => {
-    let stored = false;
-    let resourceHeads = 0;
-    const { pod, checks, requests } = fixture(async (url, init) => {
-      if (url !== target) return;
-      if (init?.method === "PUT") stored = true;
-      // The first HEAD sees the write, and the policy check sees a different private version.
-      if (stored && init?.method === "HEAD" && ++resourceHeads === 2)
-        await pod.fetch(url, { method: "PUT", body: "Concurrent version" });
-    });
-    expect(await checks.verifyPrivateDestination(target)).toBe(true);
-    await pod.fetch(target, { method: "PUT", body: "Imported version" });
-    stored = true;
-    await expect(checks.confirmPrivateWrite(target, { etag: '"v1"' })).resolves.toBe(false);
-    expect(resourceHeads).toBe(3);
-    expect(requests().at(-1)).toBe(`HEAD ${target}`);
-  });
-
   it.each([
     false,
     true,
@@ -1061,73 +938,23 @@ describe("owner-only destination verifier", () => {
     await expect(verify(target)).resolves.toBe(true);
   });
 
-  it("rejects an out-of-scope target before opening storage", async () => {
-    const { openStorage, verify, requests } = fixture();
-    await expect(verify(new URL("../bob/statement.ttl", root).href)).rejects.toThrow();
-    expect(openStorage).not.toHaveBeenCalled();
-    expect(requests()).toEqual([]);
-  });
-
-  it.each([
-    { protocol: "lws" },
-    { root: new URL("../", root).href },
-  ] as const)("refuses a mismatched storage backend (%j) before any requests", async (mismatch) => {
-    const { storage, requests } = fixture();
-    const checks = createOwnerOnlyDestinationChecks({
-      podRoot: root,
-      ownerWebId,
-      openStorage: () => ({ ...storage, ...mismatch }),
+  it("exposes guarded container creation through the session verifier", async () => {
+    const { pod, fetch, requests } = fixture();
+    const verify = createSessionPrivateDestinationVerifier({
+      fetch,
+      storageUrl: root,
+      webId: ownerWebId,
     });
-    expect(await checks.verifyPrivateDestination(target)).toBe(false);
-    expect(await checks.confirmPrivateWrite(target, {})).toBe(false);
-    expect(requests()).toEqual([]);
+    const refusal = new Error("The session refused further mutations");
+    await expect(verify.beforeWrite?.(target, () => Promise.reject(refusal))).rejects.toBe(refusal);
+    expect(requests().filter((request) => request.startsWith("PUT "))).toEqual([]);
+    expect(pod.get(parent)).toBeUndefined();
   });
+});
 
-  it("refuses a missing pod root without creating containers", async () => {
-    const { verify, requests } = fixture((url) =>
-      url === root ? new Response(null, { status: 404 }) : undefined,
-    );
-    expect(await verify(target)).toBe(false);
-    expect(requests()).toEqual([`HEAD ${container}`, `HEAD ${parent}`, `HEAD ${root}`]);
-  });
-
-  it.each([{ status: 206 }, { url: parent }, { kind: "resource" }] satisfies Partial<
-    Awaited<ReturnType<StorageClient["head"]>>
-  >[])("rejects unexpected container metadata (%j)", async (metadata) => {
-    const { pod, storage, verify, requests } = fixture();
-    await pod.fetch(container, { method: "PUT", body: "" });
-    const head = storage.head;
-    vi.spyOn(storage, "head").mockImplementation(async (url, options) => ({
-      ...(await head(url, options)),
-      ...metadata,
-    }));
-    await expect(verify(target)).rejects.toThrow("Unexpected destination metadata.");
-    expect(requests()).toEqual([`HEAD ${container}`]);
-  });
-
-  it("propagates cancellation before sending requests and before returning success", async () => {
-    const controller = new AbortController();
-    const { storage, requests } = fixture();
-    const head = storage.head;
-    vi.spyOn(storage, "head").mockImplementation(async (url, options) => {
-      try {
-        return await head(url, options);
-      } finally {
-        if (url === target) controller.abort();
-      }
-    });
-    const openStorage = vi.fn(() => storage);
-    const verify = createOwnerOnlyDestinationVerifier({
-      podRoot: root,
-      ownerWebId,
-      openStorage,
-      signal: controller.signal,
-    });
-    await expect(verify(target)).rejects.toMatchObject({ name: "AbortError" });
-    expect(requests().at(-1)).toBe(`HEAD ${target}`);
-    const count = requests().length;
-    await expect(verify(target)).rejects.toMatchObject({ name: "AbortError" });
-    expect(requests()).toHaveLength(count);
-    expect(openStorage).toHaveBeenCalledTimes(1);
-  });
+it("re-exports the shared pod-access checks through both connector entry points", () => {
+  expect(publicChecks).toBe(podAccessChecks);
+  expect(createOwnerOnlyDestinationChecks).toBe(podAccessChecks);
+  expect(publicVerifier).toBe(podAccessVerifier);
+  expect(createOwnerOnlyDestinationVerifier).toBe(podAccessVerifier);
 });

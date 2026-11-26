@@ -303,6 +303,17 @@ it("resolves scopes, evaluates guards, unregisters, suppresses editable targets 
   expect(document.activeElement).toBe(trigger);
 });
 
+it("omits the sidebar shortcut from help on a page without a sidebar", () => {
+  render(
+    h(ShortcutsProvider, {
+      children: h(ShortcutHelpSheet, { open: true, onOpenChange: vi.fn(), hasSidebar: false }),
+    }),
+  );
+  const dialog = screen.getByRole("dialog", { name: "Keyboard shortcuts" });
+  expect(within(dialog).queryByText("Toggle sidebar")).toBeNull();
+  expect(within(dialog).getByText("Toggle details pane")).toBeTruthy();
+});
+
 it("virtualizes large result sets and filters them without losing relevance order", async () => {
   const many = Array.from(
     { length: 200 },

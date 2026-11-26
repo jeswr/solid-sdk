@@ -5,6 +5,7 @@ import { Parser, Store } from "n3";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import {
+  AdmissionError,
   admit,
   assertFidelity,
   type CodegenConfig,
@@ -64,7 +65,6 @@ describe("security review R2: MUSTs cannot be weakened", () => {
 
 describe("security review R3: closed SHACL admission", () => {
   for (const component of [
-    'sh:hasValue "required";',
     "sh:maxLength 2;",
     "sh:or ( [ sh:minLength 5 ] );",
     'sh:pattern "^unknown";',
@@ -77,15 +77,14 @@ describe("security review R3: closed SHACL admission", () => {
       );
     });
   }
-  for (const component of [
-    "sh:closed true;",
-    "sh:not [ sh:class ex:Bad ];",
-    "sh:hasValue ex:Bad;",
-  ]) {
+  for (const component of ["sh:closed true;", "sh:hasValue ex:Bad;"]) {
     it(`rejects unsupported node constraint ${component}`, () => {
       expect(admit(ontology, shapesFor("", component), EX).ok).toBe(false);
     });
   }
+  it("rejects unsupported sh:class inside a logical operand before normalization", () => {
+    expect(() => shapesFor("", "sh:not [ sh:class ex:Bad ];")).toThrow(AdmissionError);
+  });
   it("checks shapes outside the ontology namespace and orphan property shapes", () => {
     const shapes = parseShapes(
       `${PREFIX} ex:S a sh:NodeShape; sh:targetClass <urn:External>; sh:closed true . ex:P a sh:PropertyShape; sh:path ex:p; sh:hasValue "required" .`,

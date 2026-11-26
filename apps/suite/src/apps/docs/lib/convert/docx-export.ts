@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Claude Opus 5.5
+import { chipIri } from "@jeswr/suite-sdk/chips/core";
 import type { JSONContent } from "@tiptap/react";
 import {
   AlignmentType,
@@ -54,6 +56,15 @@ function hyperlink(href: unknown, runs: ParagraphChild[]): ParagraphChild[] {
 
 function inline(node: JSONContent): ParagraphChild[] {
   if (node.type === "hardBreak") return [new TextRun({ break: 1 })];
+  if (node.type === "chip") {
+    // Word has no chip: keep the label and the IRI as a native hyperlink (the kind is lost, so
+    // a re-import yields linked text). An unsafe IRI exports as plain label text, as in Markdown.
+    const iri = String(node.attrs?.iri ?? "");
+    const href = chipIri(iri) ? validLink(iri) : null;
+    const label = String(node.attrs?.label ?? "") || (href ?? "");
+    if (!label) return [];
+    return hyperlink(href, [new TextRun({ text: label, ...(href ? { style: "Hyperlink" } : {}) })]);
+  }
   if (node.type !== "text") return children(node).flatMap(inline);
   const marks = new Set((node.marks ?? []).map((mark) => mark.type));
   const link = node.marks?.find((mark) => mark.type === "link");

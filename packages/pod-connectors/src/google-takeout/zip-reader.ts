@@ -234,9 +234,13 @@ export async function zipDirectory(
         offset: u32(fixed, 42),
         dataStart: 0,
       };
+      if (!safeEntryName(entry.name)) {
+        entry.invalid = "unsafe-entry-path";
+        entries.push(entry);
+        continue;
+      }
       let disk = u16(fixed, 34);
       try {
-        if (!safeEntryName(entry.name)) throw new Error("Unsafe ZIP path.");
         const extra = variable.subarray(nameLength, nameLength + extraLength);
         let zip64 = false;
         for (let pos = 0; pos < extra.length; ) {

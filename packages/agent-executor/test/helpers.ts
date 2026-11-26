@@ -22,6 +22,7 @@ export function harness(bindingId = "gmail") {
     id: bindingId,
     carriage: { id: "test/1", structured: "native", footer: "none", maxBytes: 65536 },
     send: {
+      preview: vi.fn(async (wire) => wire.bytes),
       render: vi.fn(async (p) => {
         const bytes = canonicalJson(p);
         return { bytes, mediaType: "application/json", digest: digestBytes(bytes) };
@@ -121,7 +122,11 @@ export function harness(bindingId = "gmail") {
           parameters: {},
           conversation: "urn:conversation:1",
         },
-        renderedPreview: "Synthetic test proposal",
+        renderedPreview: await binding.send.preview({
+          bytes,
+          mediaType: "application/json",
+          digest: digestBytes(bytes),
+        }),
         wasGeneratedBy: "urn:proposer:1",
         createdAt: NOW,
         validUntil: UNTIL,

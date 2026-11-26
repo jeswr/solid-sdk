@@ -8,7 +8,12 @@ import { CredentialStore, noTransport } from "@jeswr/agent-credentials";
 import * as execution from "@jeswr/agent-executor";
 import { createMemoryStores } from "@jeswr/agent-executor/testing";
 import { AGENT, issueApproval, solidOdrlEngine, verifyApproval } from "@jeswr/agent-mandate";
-import { type ActionProposal, canonicalJson, digestBytes } from "@jeswr/agent-model";
+import {
+  type ActionProposal,
+  canonicalJson,
+  digestBytes,
+  recordFromTurtle,
+} from "@jeswr/agent-model";
 import { AgentRuntime, CONFIG_ED25519, saveAgent } from "@jeswr/agent-reference";
 import {
   SCHEDULE_OP,
@@ -240,7 +245,7 @@ async function fixture(mode: "permit" | "ask" | "deny" = "permit", mapped = true
     draft = proposal,
     sign: typeof gate.release = (value) => gate.release(value),
   ) {
-    const entry = await execution.createOutboxProjector({
+    const entry = await daemon.createDaemonOutboxProjector({
       bindings,
       accounts: { direct: account },
       sign,
@@ -503,11 +508,12 @@ it("rejects a gate envelope used for a different proposal or conversation", asyn
   }
 });
 
-it("replaces the model preview with a code-rendered description of the signed terms", async () => {
+it("replaces the model preview with the channel preview of the signed wire", async () => {
   const f = await fixture();
   try {
     const entry = await f.project();
     expect(JSON.stringify(entry)).not.toContain(f.proposal.renderedPreview);
+    expect(entry.proposal.renderedPreview).toBe(await f.binding.send.preview(entry.wire));
     expect(entry.proposal.renderedPreview).toContain(peer.party);
     expect(entry.proposal.renderedPreview).toContain(SCHEDULE_OP.id);
     expect(entry.proposal.renderedPreview).toContain('"durationMinutes":30');
@@ -522,7 +528,7 @@ it("omits the mapped purpose when it is absent from the signed delivery", async 
     const entry = await f.project();
     expect(entry.proposal.intent.purpose).toBe(PURPOSE.scheduling);
     expect(entry.renderable.message.body).not.toHaveProperty("purpose");
-    expect(JSON.parse(entry.proposal.renderedPreview)).not.toHaveProperty("purpose");
+    expect(JSON.parse(entry.proposal.renderedPreview).body).not.toHaveProperty("purpose");
   } finally {
     await f.close();
   }
@@ -545,6 +551,29 @@ it("invalidates owner approval when one approval-bound term changes", async () =
     f.stores.entries.set(f.proposal.id, changed);
     expect(changed.proposal.intent.termsDigest).not.toBe(entry.proposal.intent.termsDigest);
     expect(await f.executor.transmit(f.proposal.id)).toMatchObject({ status: "awaiting-approval" });
+    expect(f.tokens.calls.filter(({ access }) => access === "send")).toHaveLength(0);
+  } finally {
+    await f.close();
+  }
+});
+
+it("refuses a released wire that differs from the preview the owner approved", async () => {
+  const f = await fixture();
+  try {
+    const release = await f.gate.release(f.proposal);
+    if (!release.ok) throw new Error(release.reason);
+    const entry = await f.project();
+    // Model an older outbox entry whose owner approved the gate's signed-term summary.
+    expect(release.preview).not.toBe(entry.proposal.renderedPreview);
+    entry.proposal.renderedPreview = release.preview;
+    entry.proposal.intent.termsDigest = execution.proposalTermsDigest(entry);
+    await f.approve(entry);
+
+    expect(await f.executor.transmit(f.proposal.id)).toEqual({
+      status: "refused",
+      reason: "preview-mismatch",
+    });
+    expect(f.verify).not.toHaveBeenCalled();
     expect(f.tokens.calls.filter(({ access }) => access === "send")).toHaveLength(0);
   } finally {
     await f.close();
@@ -631,7 +660,7 @@ it("renders a valid release using sign: gate.release only after its linked decis
     });
     return direct.send.render(...args);
   });
-  const project = execution.createOutboxProjector({
+  const prepare = daemon.createDaemonOutboxProjector({
     bindings: {
       direct: {
         ...direct,
@@ -646,6 +675,7 @@ it("renders a valid release using sign: gate.release only after its linked decis
     accounts: { direct: account },
     sign: gate.release,
   });
+  const project = vi.fn(prepare);
   try {
     await daemon
       .createDaemon({
@@ -716,7 +746,13 @@ it("renders a valid release using sign: gate.release only after its linked decis
       })
       .once();
     expect(render).toHaveBeenCalledOnce();
-    expect(pod.resources.has(f.proposal.id)).toBe(true);
+    const entry = await project.mock.results[0]?.value;
+    expect(
+      await recordFromTurtle(pod.resources.get(f.proposal.id)?.body ?? "", f.proposal.id),
+    ).toMatchObject({
+      renderedPreview: await direct.send.preview(entry.wire),
+      intent: { termsDigest: execution.proposalTermsDigest(entry) },
+    });
   } finally {
     await f.close();
   }

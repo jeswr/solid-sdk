@@ -70,6 +70,13 @@ export function mergeNodeShapes(shapes: NodeShapeModel[]): NodeShapeModel[] {
         if (JSON.stringify(prior.aliasPredicates ?? []) !== JSON.stringify(c.aliasPredicates ?? []))
           fail("different alternative paths");
         const merged: ShapeConstraint = { ...prior, sources: [...propertySources(prior), c] };
+        if (
+          prior.hasValue &&
+          c.hasValue &&
+          JSON.stringify(prior.hasValue) !== JSON.stringify(c.hasValue)
+        )
+          fail("different hasValue");
+        if (merged.hasValue === undefined && c.hasValue !== undefined) merged.hasValue = c.hasValue;
         for (const key of [
           "datatype",
           "hasClass",

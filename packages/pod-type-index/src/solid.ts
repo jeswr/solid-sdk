@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
-import type { RdfReadResult, StorageClient } from "@jeswr/storage-client";
-import { StorageError } from "@jeswr/storage-client";
+import type { RdfReadResult, ReadResult, StorageClient } from "@jeswr/storage-client";
+import { isAuxiliaryResource, StorageError } from "@jeswr/storage-client";
 import { canonicalize } from "@jeswr/suite-vocab";
 import { DataFactory } from "n3";
 import { documentUrl, error, requireScoped, scoped } from "./common.js";
@@ -49,6 +49,42 @@ function reader(storage: StorageClient, signal: AbortSignal) {
       cache.set(key, pending);
     }
     return pending;
+  };
+}
+
+/** Inspect mutation destinations before reading their RDF or changing any documents. */
+function mutationReader(storage: StorageClient, signal: AbortSignal) {
+  const read = reader(storage, signal);
+  const observations = new Map<string, Promise<ReadResult | undefined>>();
+  const destinations = new Set<string>();
+  function observe(url: string) {
+    let pending = observations.get(url);
+    if (!pending) {
+      pending = storage.head(url, { signal, revalidate: true }).catch((cause) => {
+        if (missing(cause)) return undefined;
+        throw cause;
+      });
+      observations.set(url, pending);
+    }
+    return pending;
+  }
+  return async (url: string) => {
+    if (url.includes("?")) throw error("bad-request", storage.root, "PUT");
+    if (isAuxiliaryResource(url)) throw error("invalid-response", storage.root, "PUT");
+    const parent = new URL(".", url).href;
+    if (storage.isWithinStorage(parent)) await observe(parent);
+    await observe(url);
+    destinations.add(url);
+    for (const target of destinations) {
+      for (const pending of observations.values()) {
+        const observed = await pending;
+        if (observed && isAuxiliaryResource(target, observed))
+          throw error("invalid-response", storage.root, "PUT");
+      }
+    }
+    const document = await read(url);
+    if (document && document.url !== url) throw error("invalid-response", storage.root, "PUT");
+    return document;
   };
 }
 
@@ -128,7 +164,6 @@ export function solidIndex(storage: StorageClient, webId: string) {
   }
 
   async function save(document: RdfReadResult, fresh: boolean, signal: AbortSignal) {
-    if (new URL(document.url).search) throw error("bad-request", storage.root, "PUT");
     if (!fresh) {
       if (!document.etag || !/^"[\x21\x23-\x7E\x80-\xFF]*"$/.test(document.etag)) {
         throw error("precondition-required", document.url, "PUT");
@@ -174,7 +209,7 @@ export function solidIndex(storage: StorageClient, webId: string) {
     const signal = AbortSignal.timeout(30_000);
     for (let attempt = 0; ; attempt++) {
       try {
-        const read = reader(storage, signal);
+        const read = mutationReader(storage, signal);
         const card = await read(profileUrl);
         if (!card) throw error("not-found", profileUrl);
         const owner = resource(card, profile);
@@ -202,13 +237,12 @@ export function solidIndex(storage: StorageClient, webId: string) {
           url = single(links(resource(host, profile), PRIVATE, true));
         }
         if (!url && remove) return;
-        const linked = url !== undefined;
         url ??= new URL(`settings/${visibility}TypeIndex.ttl`, storage.root).href;
         const existing = await read(url);
         if (!existing && remove) return;
         const document = existing ?? emptyDocument(url);
         const docSubject = resource(document, url);
-        if (existing && !linked && !docSubject.iris(TYPE).includes(INDEX)) {
+        if (existing && !docSubject.iris(TYPE).includes(INDEX)) {
           throw error("conflict", url);
         }
         // Turtle writes must not collapse foreign named graphs into the default graph.

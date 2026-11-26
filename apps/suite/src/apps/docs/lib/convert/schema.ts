@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex
 
+import { type ChipKind, chipIri, chipKinds } from "@jeswr/suite-sdk/chips";
 import { Mark } from "@tiptap/pm/model";
 import { getSchema, type JSONContent } from "@tiptap/react";
 import { baseExtensions } from "../../editor/extensions";
@@ -18,6 +19,13 @@ export const importSchema = getSchema(baseExtensions(globalThis.fetch));
 /** Apply the same URL policy to mapped imports and embedded document payloads. */
 export function normaliseDestinations(node: JSONContent, skipped: SkippedItem[]): JSONContent {
   const result = { ...node };
+  if (
+    node.type === "chip" &&
+    (!chipIri(String(node.attrs?.iri ?? "")) || !chipKinds.includes(node.attrs?.kind as ChipKind))
+  ) {
+    reportSkipped(skipped, "Unsafe chip");
+    return { type: "text", text: String(node.attrs?.label ?? "") };
+  }
   if (node.marks)
     result.marks = node.marks.flatMap((mark) => {
       if (mark.type !== "link") return [mark];

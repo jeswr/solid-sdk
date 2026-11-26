@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +19,7 @@ import {
   createMemoryPod,
   fileImport,
   memoryFile,
+  ownerOnlyFixtureChecks,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
   TEST_WEBID,
@@ -179,6 +179,7 @@ describe("Takeout shared reconciliation budget", () => {
     );
     const pod = createMemoryPod();
     const writer = createFetchPodWriter({
+      ...ownerOnlyFixtureChecks,
       adapterId: googleTakeoutFileAdapter.metadata.id,
       webId: TEST_WEBID,
       profileDocumentUrl: TEST_PROFILE_DOC,
@@ -568,7 +569,7 @@ describe("Takeout untrusted paths and classification", () => {
     );
     expect(report).toMatchObject({
       skipped: 1,
-      unsupported: ["(invalid path): invalid-entry"],
+      unsupported: ["(invalid path): unsafe-entry-path"],
     });
   });
   it("reports safe ZIP names outside the Takeout root without dispatching them", async () => {

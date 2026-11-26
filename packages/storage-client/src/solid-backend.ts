@@ -8,7 +8,7 @@ import { Container, Resource } from "@solid/object/solid";
 import { DataFactory } from "n3";
 import { StorageError } from "./errors.js";
 import { allowOf, discard, linksOf, listingContainer, type ReadShape, scoped } from "./http.js";
-import { paginate, pathParent, validateListingMaxBytes } from "./internal.js";
+import { paginate, pathParent, validateMaxBytes } from "./internal.js";
 import {
   acceptReadStatus,
   createReadOperations,
@@ -173,7 +173,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     inspect?: InspectContainer,
   ) {
     const container = listingContainer(root, url, versionHistoryQuery(features, root, url));
-    validateListingMaxBytes(opts.maxBytes);
+    validateMaxBytes(opts.maxBytes);
     if (opts.cursor !== undefined) {
       throw new StorageError("bad-request", {
         method: "GET",

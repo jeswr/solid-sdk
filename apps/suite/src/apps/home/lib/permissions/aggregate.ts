@@ -18,6 +18,9 @@ import { authorizationTurtle, clauseSignature, grantSignature, isExposureConditi
 
 export function classifyAgent(subject: Subject): Pick<AgentRow, "kind" | "key" | "id"> | undefined {
   switch (subject.kind) {
+    case "group":
+      if (!httpUrl(subject.group)) return undefined;
+      return { kind: "group", key: `group:${subject.group}`, id: subject.group };
     case "public":
     case "authenticated":
       return { kind: subject.kind, key: subject.kind, id: subject.kind };

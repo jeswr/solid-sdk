@@ -22,6 +22,7 @@ const classes: Readonly<Record<string, readonly string[]>> = {
   spotify: schema("MusicRecording", "MusicPlaylist", "ListenAction"),
   github: [...schema("SoftwareSourceCode"), `${NS.FOAF}OnlineAccount`],
   strava: schema("ExerciseAction", "TravelAction"),
+  "activity-files": schema("ExerciseAction", "TravelAction"),
   reddit: [...schema("SocialMediaPosting"), `${NS.FOAF}Group`],
   discord: [`${NS.FOAF}OnlineAccount`, `${NS.FOAF}Group`],
   twitch: schema("WatchAction"),

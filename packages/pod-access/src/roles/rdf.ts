@@ -6,7 +6,7 @@
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DatasetWrapper, SetFrom } from "@rdfjs/wrapper";
 import { AccessControlResource, AclResource, type Matcher, Policy } from "@solid/object";
-import { DataFactory, Store } from "n3";
+import { type BlankNode, DataFactory, type NamedNode, Store } from "n3";
 import { ACL, ACP, FOAF, modeIri, RDF, RdfNode, readModes } from "../rdf.js";
 import { readWac } from "../systems/wac.js";
 import type { EffectivePolicy, Grant, Mode, PodImplementation, Subject } from "../types.js";
@@ -384,6 +384,49 @@ export function replaceWac(
     for (const mode of modes) rule.add(`${ACL}mode`, modeIri(mode));
   }
 }
+/**
+ * Keep only the listed principals in a WAC access document: remove every other agent, group
+ * and agent class from every rule (whatever its targets or scope), then remove every rule left
+ * with no principal, which would otherwise be an inert rule that verifiers cannot place.
+ * Returns whether anything changed. It never adds a principal or a mode.
+ */
+export function retainWacPrincipals(dataset: Store, keep: readonly AgentRef[]): boolean {
+  const keys = new Set(keep.map(agentKey));
+  const selectors: [string, (term: Term) => AgentRef][] = [
+    ["agent", (term) => ({ type: "webid", id: term.value })],
+    ["agentGroup", (term) => ({ type: "group", id: term.value })],
+    [
+      "agentClass",
+      // The role reader has already refused any other class.
+      (term) => ({ type: term.value === `${FOAF}Agent` ? "public" : "authenticated" }),
+    ],
+  ];
+  const rules = new Map<string, BlankNode | NamedNode>();
+  for (const name of ["agent", "agentGroup", "agentClass", "accessTo", "default", "mode"])
+    for (const quad of dataset.match(null, DataFactory.namedNode(ACL + name)))
+      rules.set(
+        JSON.stringify([quad.subject.termType, quad.subject.value]),
+        quad.subject as BlankNode | NamedNode,
+      );
+  let changed = false;
+  for (const term of rules.values()) {
+    const rule = properties(term, dataset);
+    let principals = 0;
+    for (const [name, identify] of selectors)
+      for (const value of [...rule.terms(ACL + name)]) {
+        if (keys.has(agentKey(identify(value)))) principals++;
+        else {
+          rule.terms(ACL + name).delete(value);
+          changed = true;
+        }
+      }
+    if (principals) continue;
+    for (const predicate of new Set([...dataset.match(term)].map((q) => q.predicate.value)))
+      rule.terms(predicate).clear();
+    changed = true;
+  }
+  return changed;
+}
 /** Detach only resource and own ACR controls; defaults and policy metadata remain intact. */
 export function detachAcp(
   dataset: Store,
@@ -409,7 +452,13 @@ export function removeAcpAgent(
   members = false,
 ): void {
   const key = agentKey(agent);
-  function withoutAgent(term: Term): Term {
+  // A matcher this edit emptied (no agent, client, issuer or VC left) matches nobody. Leaving it
+  // in place yields an inert policy no verifier can place, so the policy is dropped instead:
+  // an allOf with an emptied matcher, or an anyOf whose alternatives were all emptied, could
+  // never have matched anyone else either, so dropping it changes no one else's access.
+  const emptied = (matcher: Properties) =>
+    ["agent", "client", "issuer", "vc"].every((name) => !matcher.terms(ACP + name).size);
+  function withoutAgent(term: Term): Term | undefined {
     if (
       !policySubjects(new Policy(term, dataset, DataFactory), implementation).some(
         (clause) => agentKey(subjectAgent(clause[0] as Subject)) === key,
@@ -417,8 +466,11 @@ export function removeAcpAgent(
     )
       return term;
     const copy = clone(term, dataset, dataset, [`${ACP}allOf`, `${ACP}anyOf`]);
-    for (const name of ["allOf", "anyOf"])
-      for (const matcher of properties(term, dataset).nodes(ACP + name)) {
+    let never = false;
+    for (const name of ["allOf", "anyOf"]) {
+      const matchers = properties(term, dataset).nodes(ACP + name);
+      let kept = 0;
+      for (const matcher of matchers) {
         const original = properties(matcher as Term, dataset);
         const subject = agentSubject(agent);
         const selector = subject.kind === "client" ? `${ACP}client` : `${ACP}agent`;
@@ -434,11 +486,18 @@ export function removeAcpAgent(
           // PublicAgent behind as an unconditional public authorization.
           if (subject.kind === "client" && !split.values(selector).size)
             split.values(`${ACP}agent`).clear();
+          if (emptied(split)) {
+            if (name === "allOf") never = true;
+            continue;
+          }
           next = split as Term;
         }
         copy.terms(ACP + name).add(next);
+        kept++;
       }
-    return copy as Term;
+      if (name === "anyOf" && matchers.length && !kept) never = true;
+    }
+    return never ? undefined : (copy as Term);
   }
   for (const root of roots(dataset)) {
     const node = properties(root as Term, dataset);
@@ -448,7 +507,7 @@ export function removeAcpAgent(
       for (const policy of [...node.nodes(ACP + name)]) {
         const next = withoutAgent(policy as Term);
         node.terms(ACP + name).delete(policy as Term);
-        node.terms(ACP + name).add(next);
+        if (next) node.terms(ACP + name).add(next);
       }
     for (const name of ["accessControl", ...(members ? ["memberAccessControl"] : [])])
       for (const control of [...node.nodes(ACP + name)]) {
@@ -456,9 +515,10 @@ export function removeAcpAgent(
         const next = policies.map((policy) => withoutAgent(policy as Term));
         if (next.every((policy, index) => policy === policies[index])) continue;
         const split = clone(control as Term, dataset, dataset, [`${ACP}apply`]);
-        for (const policy of next) split.terms(`${ACP}apply`).add(policy);
+        for (const policy of next) if (policy) split.terms(`${ACP}apply`).add(policy);
         node.terms(ACP + name).delete(control as Term);
-        node.terms(ACP + name).add(split as Term);
+        // A control left with no policy grants nothing; drop it rather than leave it inert.
+        if (split.terms(`${ACP}apply`).size) node.terms(ACP + name).add(split as Term);
       }
   }
 }

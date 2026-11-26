@@ -1,7 +1,12 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6
 import type { ProposalContext } from "@jeswr/agent-channels";
-import type { ProposalRelease } from "@jeswr/agent-executor";
+import {
+  createOutboxProjector,
+  ProposalRefusedError,
+  type ProposalRelease,
+  proposalTermsDigest,
+} from "@jeswr/agent-executor";
 import {
   type ActionProposal,
   type AnyMessage,
@@ -21,6 +26,22 @@ import { readPrivate, writePrivate } from "./local.js";
 export interface OutboundMapping {
   readonly handlers: readonly OperationHandler[];
   plan(proposal: ActionProposal): { conversation: string; plan: OutboundPlan } | undefined;
+}
+
+/** Finalize the channel's wire preview before the host persists the entry. */
+export function createDaemonOutboxProjector(options: Parameters<typeof createOutboxProjector>[0]) {
+  const bindings = { ...options.bindings };
+  const project = createOutboxProjector({ ...options, bindings });
+  return async (proposal: ActionProposal) => {
+    const entry = await project(proposal);
+    const binding = bindings[entry.proposal.intent.binding];
+    if (!binding) throw new ProposalRefusedError("unsupported-binding");
+    entry.proposal.renderedPreview = await binding.send.preview(entry.wire).catch(() => {
+      throw new ProposalRefusedError("preview-mismatch");
+    });
+    entry.proposal.intent.termsDigest = proposalTermsDigest(entry);
+    return entry;
+  };
 }
 
 const digest = z.string().regex(/^sha-256:[a-f0-9]{64}$/);

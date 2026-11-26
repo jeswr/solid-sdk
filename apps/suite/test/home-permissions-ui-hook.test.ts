@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AgentRow, PermissionsSnapshot } from "../src/apps/home/lib/permissions";
@@ -9,11 +10,15 @@ const mocks = vi.hoisted(() => ({
   load: vi.fn(),
   apply: vi.fn(),
   client: vi.fn(),
+  groups: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
   info: vi.fn(),
 }));
 vi.mock("../src/apps/home/components/home-app", () => ({ useHomeSession: () => mocks.session }));
+vi.mock("../src/shell/groups/client", () => ({
+  groupDirectory: async () => ({ list: mocks.groups }),
+}));
 vi.mock("@jeswr/suite-ui", () => ({
   toast: { success: mocks.success, error: mocks.error, info: mocks.info },
 }));
@@ -93,6 +98,7 @@ beforeEach(() => {
   mocks.load.mockResolvedValue(snapshot);
   mocks.apply.mockResolvedValue({ undo: { changes: [], restore: [] } });
   mocks.client.mockResolvedValue({ name: "Coach" });
+  mocks.groups.mockResolvedValue([]);
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>(async () => {
@@ -602,4 +608,23 @@ it("still announces a toast Undo's result after leaving the page", async () => {
   });
   expect(mocks.apply).toHaveBeenCalledTimes(2);
   expect(mocks.success).toHaveBeenCalledWith("Access restored");
+});
+
+it.each([
+  true,
+  false,
+])("keeps group grants visible with membership available=%s", async (available) => {
+  const id = `${ROOT}groups/family.ttl#this`;
+  mocks.load.mockResolvedValue({
+    ...snapshot,
+    rows: [{ ...bob, key: `group:${id}`, id, kind: "group" }],
+  });
+  if (available)
+    mocks.groups.mockResolvedValue([{ id, name: "Family", members: [bob.id], family: true }]);
+  else mocks.groups.mockRejectedValue(new Error("Membership unavailable"));
+  await mount(h(Probe));
+  expect(binding.status).toBe("ready");
+  expect(binding.rows[0]).toMatchObject({ kind: "group", id });
+  expect(binding.rows[0]?.members).toEqual(available ? [bob.id] : undefined);
+  expect(binding.rows[0]?.name).toBe(available ? "Family" : undefined);
 });

@@ -340,6 +340,8 @@ it("H1/M2: walks every production writer and quad emission call site in both pac
     "federation-codegen/src/rdf.ts:serializeCanonicalTurtle:Writer",
     "federation-codegen/src/rdf.ts:serializeCanonicalTurtle:writer.addQuads",
     "federation-codegen/src/shapes.ts:parseShapes:DataFactory.quad",
+    // Pre-admission rewrites only anchored shape identities, before bounded logic parsing.
+    "federation-codegen/src/shapes.ts:parseShapes:DataFactory.quad",
     "model-runtime/src/rdf.ts:serializeTurtle:Writer",
     "model-runtime/src/rdf.ts:serializeTurtle:writer.addQuads",
   ]);

@@ -73,7 +73,12 @@ it("property: all 256 Halt/Resume/file sequences fence the executor using real d
           direct: {
             id: "direct",
             carriage: { id: "fixture", structured: "native", footer: "none", maxBytes: 65536 },
-            send: { render: async () => wire, validate: async () => ({ ok: true }), transmit },
+            send: {
+              render: async () => wire,
+              preview: async (wire) => wire.bytes,
+              validate: async () => ({ ok: true }),
+              transmit,
+            },
           },
         },
         mandates: {
@@ -123,6 +128,7 @@ it("property: all 256 Halt/Resume/file sequences fence the executor using real d
           proposal: {
             ...exampleRecords["action-proposal"],
             id: `urn:proposal:${index}`,
+            renderedPreview: wire.bytes,
             createdAt: at,
             validUntil: until,
             intent: {

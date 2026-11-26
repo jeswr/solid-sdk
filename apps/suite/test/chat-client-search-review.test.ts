@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChatClient, type Message, type Room } from "../src/apps/chat/lib/client";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -80,6 +81,7 @@ it("accepts RDF NamedNodes without letting a URN note break the HTTP message res
   const result = await client.search("hello", { timeZone: "UTC" });
   expect(result.results.map(({ message }) => message.id)).toEqual([valid.id]);
   expect(result.droppedRecords).toBe(1);
+  expect((await client.messages(joined.url)).dropped).toBe(1);
 });
 
 it("uses resolved names only, truncates repaired names and seeds the session display name", async () => {
@@ -275,7 +277,7 @@ it("propagates aborts through discovery, metadata and day fetches without report
       cancellable.search("hello", { timeZone: "UTC", signal: controller.signal }),
     ).rejects.toMatchObject({ name: "AbortError" });
     expect(fetch.mock.calls.filter(([input]) => String(input).includes(joined.url))).toHaveLength(
-      suffix === "chat/rooms.ttl" ? 0 : suffix === "index.ttl" ? 1 : 2,
+      suffix === "chat/rooms.ttl" ? 0 : suffix === "index.ttl" ? 1 : 3,
     );
   }
   const controller = new AbortController();

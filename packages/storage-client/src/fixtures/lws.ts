@@ -129,7 +129,7 @@ export const lwsWriteExchanges: RecordedExchanges = {
     headers: {
       etag: '"resource"',
       "content-type": "text/turtle",
-      link: `<${LWS_WRITE_METADATA}>; rel="linkset", <${LWS_CONTAINER}>; rel="up"`,
+      link: `<${LWS_WRITE_METADATA}>; rel="linkset", <${LWS_CONTAINER}>; rel="up", <https://www.w3.org/ns/lws#DataResource>; rel="type"`,
     },
   },
   [`GET ${LWS_WRITE_RESOURCE}`]: {

@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import type { ChipRef } from "@jeswr/suite-sdk/chips";
+
 /** Text values are literal strings: render as text nodes, never as HTML. */
 export type InlineNode =
+  | { type: "chip"; ref: ChipRef }
   | { type: "text"; value: string }
   | { type: "bold" | "italic"; children: InlineNode[] }
   | { type: "code"; value: string }

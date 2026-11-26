@@ -10,6 +10,8 @@
  * - Tier C → **export-file** (no user-grade API; imports the user's official export file)
  *
  * Hosts inject public OAuth configuration through createRegistry().
+ * Optional encrypted refresh persistence is host-owned through ./vault + ./oauth;
+ * it never changes catalog tiers, readiness, or the data written into a pod.
  */
 
 import type { IntegrationAdapter, IntegrationMetadata } from "./core/types.js";
@@ -151,6 +153,13 @@ export const TIER_B: readonly CatalogEntry[] = TIER_B_ADAPTERS.map((a) => ({
 
 /** Tier C — no user-grade API; the platform's official export file instead. */
 export const TIER_C: readonly CatalogEntry[] = [
+  C(
+    "activity-files",
+    "Activity files",
+    ["health", "mobility"],
+    "Workouts and tracks from exported activity files.",
+    "GPX / FIT / TCX / ZIP",
+  ),
   C("netflix", "Netflix", ["media"], "Your viewing history into Media.", "Viewing-activity CSV"),
   C(
     "amazon-orders",

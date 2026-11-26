@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import {
   createBrowserCaches,
   type RefreshSessionRecord,
@@ -365,6 +364,16 @@ test("the anonymous lifecycle adapter delegates login to add", async () => {
   expect((await anonymous.fetch(f.alice.root + "private")).status).toBe(401);
   await anonymous.login({ webId: f.alice.webId });
   expect(manager.active()?.webId).toBe(f.alice.webId);
+});
+
+test("the anonymous adapter refuses account-bound fetch for the active account", async () => {
+  const f = fixture();
+  const manager = f.load();
+  const account = await manager.add();
+  const requests = f.transport.mock.calls.length;
+
+  expect(() => manager.authFor(null).fetchFor(account)).toThrow("Account session is unavailable");
+  expect(f.transport).toHaveBeenCalledTimes(requests);
 });
 
 test.each([

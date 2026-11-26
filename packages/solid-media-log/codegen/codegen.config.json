@@ -1,0 +1,88 @@
+{
+  "shapesBase": "https://jeswr.org/ns/media-log/shapes#",
+  "prefixes": {
+    "log": "https://jeswr.org/ns/media-log#",
+    "media": "https://jeswr.org/ns/sectors/media#",
+    "core": "https://jeswr.org/ns/core#",
+    "schema": "http://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "prov": "http://www.w3.org/ns/prov#",
+    "dc": "http://purl.org/dc/elements/1.1/"
+  },
+  "entities": [
+    {
+      "name": "MediaLog",
+      "kind": "composite",
+      "root": "entry",
+      "nodes": {
+        "entry": {
+          "targetClass": "https://jeswr.org/ns/media-log#LogEntry",
+          "fragment": "it",
+          "fields": {
+            "status": {},
+            "startDate": {
+              "rename": "started"
+            },
+            "endDate": {
+              "rename": "finished"
+            },
+            "repeatCount": {},
+            "progress": {},
+            "progressUnit": {},
+            "wasDerivedFrom": {
+              "rename": "origin",
+              "iriScheme": "http-https"
+            },
+            "sourceLabel": {
+              "rename": "source"
+            }
+          },
+          "links": {
+            "about": "work",
+            "review": "review"
+          }
+        },
+        "work": {
+          "targetClass": "https://jeswr.org/ns/sectors/media#CreativeWork",
+          "fragment": "work",
+          "fields": {
+            "title": {},
+            "additionalType": {
+              "rename": "workType"
+            },
+            "creator": {},
+            "image": {
+              "rename": "cover",
+              "iriScheme": "http-https"
+            },
+            "issued": {
+              "rename": "year"
+            }
+          }
+        },
+        "review": {
+          "targetClass": "http://schema.org/Review",
+          "fragment": "review",
+          "fields": {
+            "reviewBody": {
+              "rename": "reviewText"
+            }
+          },
+          "links": {
+            "reviewRating": "rating"
+          }
+        },
+        "rating": {
+          "targetClass": "http://schema.org/Rating",
+          "fragment": "rating",
+          "fields": {
+            "ratingValue": {
+              "rename": "rating"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

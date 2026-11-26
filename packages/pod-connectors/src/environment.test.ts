@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { expect, it } from "vitest";
 
-it("confines environment access to the two Node-only VeSync credential variables", () => {
+it("confines environment access to the Node-only VeSync credentials and CLI vault key", () => {
   const root = fileURLToPath(new URL(".", import.meta.url));
   const violations: string[] = [];
   const allowedReads = new Set<string>();
@@ -17,6 +17,11 @@ it("confines environment access to the two Node-only VeSync credential variables
       ts.ScriptTarget.Latest,
       true,
     );
+    const allowedKeys = path.endsWith("/node/vesync-auth.ts")
+      ? ["VESYNC_EMAIL", "VESYNC_PASSWORD"]
+      : path.endsWith("/node/cli.ts")
+        ? ["CONNECTOR_VAULT_KEY"]
+        : [];
     const envNames = new Set<string>();
     for (const statement of source.statements) {
       if (
@@ -31,7 +36,7 @@ it("confines environment access to the two Node-only VeSync credential variables
           if ((binding.propertyName ?? binding.name).text === "env")
             envNames.add(binding.name.text);
     }
-    if (envNames.size && !path.endsWith("/node/vesync-auth.ts")) violations.push(path);
+    if (envNames.size && !allowedKeys.length) violations.push(path);
     function visit(node: ts.Node) {
       if (
         (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
@@ -47,7 +52,7 @@ it("confines environment access to the two Node-only VeSync credential variables
           : node.argumentExpression && ts.isStringLiteral(node.argumentExpression)
             ? node.argumentExpression.text
             : "";
-        if (key === "VESYNC_EMAIL" || key === "VESYNC_PASSWORD") allowedReads.add(key);
+        if (allowedKeys.includes(key)) allowedReads.add(key);
         else violations.push(path);
       }
       ts.forEachChild(node, visit);
@@ -55,5 +60,9 @@ it("confines environment access to the two Node-only VeSync credential variables
     visit(source);
   }
   expect(violations).toEqual([]);
-  expect([...allowedReads].sort()).toEqual(["VESYNC_EMAIL", "VESYNC_PASSWORD"]);
+  expect([...allowedReads].sort()).toEqual([
+    "CONNECTOR_VAULT_KEY",
+    "VESYNC_EMAIL",
+    "VESYNC_PASSWORD",
+  ]);
 });

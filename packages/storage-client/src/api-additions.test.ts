@@ -30,16 +30,21 @@ const entry = (url: string, displayName: string | null = null): Entry => ({
 });
 
 function transport() {
-  return vi.fn<typeof fetch>(
-    async (_input, init) =>
-      new Response(null, {
-        status: init?.method === "POST" ? 201 : 204,
-        headers: {
-          etag: '"done"',
-          location: new Headers(init?.headers).get("link")?.includes("Container") ? `${URL}/` : URL,
-        },
-      }),
-  );
+  return vi.fn<typeof fetch>(async (input, init) => {
+    if (init?.method === "HEAD") {
+      const kind = String(input).endsWith("/") ? "Container" : "DataResource";
+      return new Response(null, {
+        headers: { link: `<${ROOT}>; rel="up", <https://www.w3.org/ns/lws#${kind}>; rel="type"` },
+      });
+    }
+    return new Response(null, {
+      status: init?.method === "POST" ? 201 : 204,
+      headers: {
+        etag: '"done"',
+        location: new Headers(init?.headers).get("link")?.includes("Container") ? `${URL}/` : URL,
+      },
+    });
+  });
 }
 
 describe.each(factories)("keepalive through %s", (_protocol, create) => {
@@ -60,6 +65,7 @@ describe.each(factories)("keepalive through %s", (_protocol, create) => {
     await storage.create(ROOT, null, { kind: "container", name: "folder", keepalive });
     await storage.create(ROOT, null, { kind: "container", keepalive });
     for (const [, init] of fetch.mock.calls) {
+      if (init?.method === "HEAD") continue;
       expect(init?.keepalive).toBe(keepalive);
       expect(Object.hasOwn(init as RequestInit, "keepalive")).toBe(keepalive !== undefined);
     }

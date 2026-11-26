@@ -268,6 +268,7 @@ test("desktop notifications need the account's own opt-in, saved per account", a
 for (const [section, title] of [
   ["account", "Account"],
   ["appearance", "Appearance"],
+  ["groups", "Groups & family"],
   ["storage", "Storage"],
   ["export", "Export"],
   ["notifications", "Notifications"],

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 /**
  * Native shells cannot save through a `blob:` download anchor: the iOS navigation guard cancels
  * it and Android's WebView has no download listener. Instead the file is staged in the app's
@@ -33,4 +34,20 @@ export async function saveNatively(
     { staging: shareStagingPlugin, native: sharePlugin },
   );
   return result.completed;
+}
+
+/** Saves through the platform sheet or a browser download; false means dismissed. */
+export async function saveBlob(blob: Blob, name: string, contentType?: string): Promise<boolean> {
+  if (process.env.NEXT_PUBLIC_SUITE_TARGET === "native")
+    return saveNatively(blob, name, contentType);
+  const url = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = name;
+    anchor.click();
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
+  return true;
 }
