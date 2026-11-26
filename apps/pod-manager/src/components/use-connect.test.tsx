@@ -4,6 +4,7 @@ import { createRegistry } from "@jeswr/pod-connectors";
 import { Provenance } from "@jeswr/pod-connectors/core/provenance";
 import {
   createMemoryPod,
+  ownerOnlyFixtureChecks,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
   TEST_WEBID,
@@ -22,6 +23,12 @@ const current = vi.hoisted(() => ({
     | undefined,
 }));
 vi.mock("./session-provider", () => ({ useSession: () => current.session }));
+// The memory pod has no owner-only access documents, so the app's real destination check would
+// refuse the demo write. Stand in the verified owner-only checks; the app code is unchanged.
+vi.mock("@jeswr/pod-connectors", async (original) => ({
+  ...(await original<typeof import("@jeswr/pod-connectors")>()),
+  createSessionPrivateDestinationChecks: () => ownerOnlyFixtureChecks,
+}));
 afterEach(() => vi.unstubAllGlobals());
 
 it("marks Pod Manager demo imports through the runner's default agent", async () => {
