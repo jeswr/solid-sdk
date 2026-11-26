@@ -21,6 +21,7 @@
  */
 
 import type { WorkbookMetadata } from "@jeswr/solid-sheets";
+import type { SessionResourceGrant } from "@/shell/session/types";
 import type { DraftAnchor } from "./comments/anchors";
 import type { CellAnchor } from "./comments/selector";
 import type { Snapshot } from "./model/snapshot";
@@ -109,7 +110,7 @@ export class WorkbookNotFoundError extends Error {
 /** Unsafe shared link or a shared resource that cannot be opened anonymously. */
 export class WorkbookLinkError extends Error {
   constructor(
-    message = "Shared spreadsheets must use a container URL on the same origin as your pod.",
+    message = "Open a direct workbook link in the owner's Sheets folder on the same origin as your pod.",
   ) {
     super(message);
     this.name = "WorkbookLinkError";
@@ -159,9 +160,9 @@ export interface WorkbookService {
   openShared(container: string, options?: { account?: boolean }): Promise<OpenedWorkbook>;
   /**
    * Present when the account can open private workbooks shared from another pod: lets the
-   * session read this one container until sign-out. Call only from the consent click.
+   * session use the index and snapshot addresses until sign-out. Call only from the consent click.
    */
-  grantShared?(container: string): Promise<void>;
+  grantShared?(container: string): Promise<SessionResourceGrant>;
   /**
    * Writes `workbook.json` with If-Match `base.snapshotEtag` (a freshly read ETag
    * when `force`); that guarded snapshot write owns the revision. Derived CSVs and
@@ -197,7 +198,7 @@ export interface WorkbookServiceOptions {
   readonly podRoot: string;
   readonly webId: string;
   /** Lets `fetch` use the account for one address on another pod (see `grantShared`). */
-  readonly grantResource?: (url: string) => Promise<void>;
+  readonly grantResource?: (url: string) => Promise<SessionResourceGrant>;
   /** Injectable clock for workbook creation and modification dates. */
   readonly now?: () => Date;
 }

@@ -99,6 +99,18 @@ it("uses the authenticated account and bounded fetch, with credential-free publi
   expect(listener).toHaveBeenCalledOnce();
 });
 
+it("passes the backend's revocable grant to the active Solid session", async () => {
+  const value = accounts();
+  const handle = { revoke: vi.fn() };
+  value.grantResource = vi.fn(async () => handle);
+  await mount(tree(value));
+  const pod = session();
+  if (pod.mode !== "solid") throw new Error("Expected Solid");
+  const url = "https://pod.example/bob/notes/note.ttl";
+  await expect(pod.grantResource?.(url)).resolves.toBe(handle);
+  expect(pod.accountId).toBe(alice.id);
+});
+
 it("keeps the same session for inert expired content while blocking its fetch handles", async () => {
   const value = accounts();
   const mounted = await mount(tree(value));

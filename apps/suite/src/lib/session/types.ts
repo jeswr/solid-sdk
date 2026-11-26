@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
+import type { SessionResourceGrant } from "@/shell/session/types";
 import type { SolidExtensionState } from "./extension-session";
 
 interface SessionAccount {
@@ -25,12 +26,13 @@ export interface ExtensionPodSession extends SessionAccount {
 
 export interface SolidPodSession extends SessionAccount {
   readonly mode: "solid";
+  readonly accountId?: string;
   readonly publicFetch: typeof globalThis.fetch;
   /**
    * Let `fetch` use this account for one resource or container on another person's storage,
    * until sign-out. Call only from the click on a consent screen that names the address.
    */
-  readonly grantResource?: (url: string) => Promise<void>;
+  readonly grantResource?: (url: string) => Promise<SessionResourceGrant>;
 }
 
 export type PodSession = DemoPodSession | ExtensionPodSession | SolidPodSession;

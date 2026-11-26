@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import { ResourceGrantError } from "@jeswr/pod-auth";
@@ -16,20 +17,19 @@ function place(url: string) {
   return `${host}${pathname}`;
 }
 
-/**
- * The consent screen for opening a private item shared from another pod. The click is the
- * user's consent: it lets the signed-in account read that one address until sign-out.
- */
+/** Consent for the session to send credentials to the displayed addresses. */
 export function OpenWithAccount({
   url,
   kind,
   open,
 }: {
-  url: string;
+  url: string | readonly string[];
   /** What is being opened, in words: "spreadsheet", "note". */
   kind: string;
   open: () => Promise<void>;
 }) {
+  const addresses = typeof url === "string" ? [url] : url;
+  const container = addresses.some((address) => address.endsWith("/"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const onClick = () => {
@@ -49,9 +49,17 @@ export function OpenWithAccount({
   return (
     <section className="open-with-account" aria-label="Open with your account">
       <p>
-        If the owner shared this {kind} with you, you can open it with your account. Your sign-in
-        will be used for <strong>{place(url)}</strong> only, until you sign out.
+        Until you sign out of this session, the suite will send your sign-in to the{" "}
+        {addresses.length === 1 ? "address" : "addresses"} below to read or change this {kind}
+        {container && " and everything inside it"}.
       </p>
+      <ul>
+        {addresses.map((address) => (
+          <li key={address}>
+            <strong>{place(address)}</strong>
+          </li>
+        ))}
+      </ul>
       <Button onClick={onClick} disabled={busy}>
         {busy ? "Opening…" : "Open with your account"}
       </Button>

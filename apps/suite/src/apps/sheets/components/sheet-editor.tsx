@@ -50,6 +50,7 @@ import {
 } from "../lib/contract";
 import { loadEngine } from "../lib/engine";
 import { pendingSaves } from "../lib/pending-saves";
+import { sharedWorkbookFiles } from "../lib/workbook/layout";
 import { useWorkbookService } from "../state/service";
 import { WorkbookComments } from "./cell-comments";
 import { ShareWorkbook } from "./share-workbook";
@@ -307,7 +308,11 @@ export function SheetEditor({ container }: { container: string }) {
         {state.error instanceof PrivateWorkbookError &&
           state.error.reason === "private" &&
           state.openWithAccount && (
-            <OpenWithAccount url={container} kind="spreadsheet" open={state.openWithAccount} />
+            <OpenWithAccount
+              url={sharedWorkbookFiles(container)}
+              kind="spreadsheet"
+              open={state.openWithAccount}
+            />
           )}
         <Button onClick={state.retryOpen}>Retry</Button>
         <Link href="/sheets">Back to spreadsheets</Link>

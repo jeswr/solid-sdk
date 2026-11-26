@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
 import { WorkbookLinkError } from "../src/apps/sheets/lib/contract";
@@ -56,7 +57,7 @@ describe("shared workbook credential boundary", () => {
     const sessionFetch = vi.fn<typeof fetch>(async (input, init) =>
       allowed ? pod.fetch(input, init) : new Response(null, { status: 403 }),
     );
-    const grantResource = vi.fn(async (_url: string) => {});
+    const grantResource = vi.fn(async (_url: string) => ({ revoke: vi.fn() }));
     const reader = createWorkbookService({
       ...options,
       podRoot: RECIPIENT,
@@ -67,7 +68,10 @@ describe("shared workbook credential boundary", () => {
     await expect(reader.openShared(book.container)).rejects.toMatchObject({ reason: "private" });
     expect(sessionFetch).not.toHaveBeenCalled();
     await reader.grantShared?.(book.container);
-    expect(grantResource).toHaveBeenCalledExactlyOnceWith(book.container);
+    expect(grantResource.mock.calls).toEqual([
+      [`${book.container}index.ttl`],
+      [`${book.container}workbook.json`],
+    ]);
     const opened = await reader.openShared(book.container, { account: true });
     expect(opened.readOnly).toBe(true);
     expect(opened.snapshot).toEqual(book.snapshot);
@@ -82,7 +86,49 @@ describe("shared workbook credential boundary", () => {
     await expect(
       reader.grantShared?.("https://elsewhere.example/sheets/a/"),
     ).rejects.toBeInstanceOf(WorkbookLinkError);
-    expect(grantResource).toHaveBeenCalledTimes(1);
+    expect(grantResource).toHaveBeenCalledTimes(2);
+  });
+  it.each([
+    "/alice/",
+    "/alice/private/",
+    "/alice/sheets/",
+    "/sheets/book/",
+    "/alice/sheets/book/subfolder/",
+    "/alice//sheets/book/",
+    "/alice/sheets/book/?",
+    "/alice/sheets/book/#",
+  ])("rejects %s before a read or consent can cover it", async (path) => {
+    const { options } = await harness();
+    const fetch = vi.fn(async () => new Response(null, { status: 403 }));
+    const grantResource = vi.fn();
+    const reader = createWorkbookService({
+      ...options,
+      podRoot: RECIPIENT,
+      fetch,
+      publicFetch: fetch,
+      grantResource,
+    });
+    const url = new URL(path, RECIPIENT).href;
+    await expect(reader.openShared(url)).rejects.toThrow("workbook link");
+    await expect(reader.grantShared?.(url)).rejects.toThrow("workbook link");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(grantResource).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "index.ttl",
+    "workbook.json",
+  ])("revokes the other file if granting %s fails", async (failed) => {
+    const { options } = await harness();
+    const revoke = vi.fn();
+    const grantResource = vi.fn(async (url: string) => {
+      if (url.endsWith(failed)) throw new Error("Grant refused");
+      return { revoke };
+    });
+    const reader = createWorkbookService({ ...options, podRoot: RECIPIENT, grantResource });
+    const container = "https://pod.example/team/alice/sheets/budget/";
+    await expect(reader.grantShared?.(container)).rejects.toThrow("Grant refused");
+    expect(revoke).toHaveBeenCalledOnce();
   });
   it("offers no grant without an account that supports it", async () => {
     const { reader } = await setup();

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
@@ -165,7 +166,11 @@ function SessionGate({ children }: { children: ReactNode }) {
               podRoot={root}
               {...(state.session.mode === "solid" &&
                 state.session.grantResource && {
-                  account: { fetch: state.session.fetch, grant: state.session.grantResource },
+                  account: {
+                    id: state.session.accountId ?? state.session.webId,
+                    fetch: state.session.fetch,
+                    grant: state.session.grantResource,
+                  },
                 })}
             />
           </SuiteFrame>

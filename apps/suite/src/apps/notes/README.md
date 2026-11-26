@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 Notes sharing (sst-imb.60, NOT-05 first slice) uses the shell share dialog from the
@@ -47,7 +48,8 @@ Public notes work without credentials. A private foreign note (401 or 403) says 
 for a Solid account, offers "Open with your account" (sst-imb.57.1). That click is the
 consent: it names the note's address and grants the account that one note through pod-auth's
 resource grants until sign-out, then reads it through the session, still view-only with
-redirects refused. Without access the reader is told to ask the owner. Images in a granted
+redirects refused. Switching accounts requires fresh consent. If the account is denied, Notes
+revokes the grant and asks the reader to contact the owner. Images in a granted
 note still load anonymously. Cross-origin, auxiliary and ambiguous URLs
 are refused with an explanation for foreign links. Owned notes use the existing
 Notes scope rules, including extensionless note URLs.

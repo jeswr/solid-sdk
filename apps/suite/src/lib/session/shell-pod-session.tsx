@@ -126,10 +126,16 @@ export function ShellPodSessionProvider({
       ? async (url: string) => {
           const grant = latest.current.grantResource;
           if (!usable() || !grant) throw new Error("Sign in to continue");
-          await grant(url);
+          return grant(url);
         }
       : undefined;
-    return { ...common, mode: "solid", publicFetch, ...(grantResource && { grantResource }) };
+    return {
+      ...common,
+      mode: "solid",
+      accountId: account.id,
+      publicFetch,
+      ...(grantResource && { grantResource }),
+    };
   }, [account, accounts.sessionVersion, canGrant]);
   useLayoutEffect(() => {
     if (
