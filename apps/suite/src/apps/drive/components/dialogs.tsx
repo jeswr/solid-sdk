@@ -88,6 +88,8 @@ export function DriveDialogs() {
           onClose={closeDialog}
           onSaved={() => invalidate(dialog.item.url)}
           onCloseAutoFocus={restoreDialogFocus}
+          // Sheets coordinates a workbook's folder and contents sharing as one.
+          scopedEditor={!dialog.item.workbook}
         />
       )}
       <UploadConflictDialog />
