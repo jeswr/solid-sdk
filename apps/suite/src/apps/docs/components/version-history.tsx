@@ -313,7 +313,9 @@ export function VersionHistory({
                   onClick={() => void choose(version)}
                 >
                   <span>{version.name || new Date(version.created).toLocaleString()}</span>
-                  <small title={version.creator}>{displayName(version.creator)}</small>
+                  <small title={version.creator} aria-description={version.creator}>
+                    {displayName(version.creator)}
+                  </small>
                 </button>
               </li>
             ))}

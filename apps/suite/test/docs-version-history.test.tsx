@@ -487,3 +487,15 @@ it("restores a version as-is while suggesting mode is on (never blocked or turne
   await waitFor(() => expect(editor.getText()).toBe("Old content"));
   expect(suggestions(editor.state.doc)).toEqual([]);
 });
+
+// AUTHORED-BY Claude Opus 5.5
+it("exposes each version author's WebID to assistive technology, not only on hover", async () => {
+  render(<Harness />);
+  await screen.findByText("First draft");
+  const bob = "https://bob.example/#me";
+  const label = document.querySelector(`[title="${bob}"]`) as HTMLElement;
+  expect(label.getAttribute("aria-description")).toBe(bob);
+  expect(document.querySelector(`[title="${webId}"]`)?.getAttribute("aria-description")).toBe(
+    webId,
+  );
+});

@@ -201,7 +201,8 @@ it.each([
   expect(publicFetch).toHaveBeenCalledOnce();
   const [, init] = publicFetch.mock.calls[0] as unknown as Parameters<typeof globalThis.fetch>;
   expect(init?.credentials).toBe("omit");
-  expect(init?.redirect).toBe("manual");
+  // The shared profile reader refuses redirects outright.
+  expect(init?.redirect).toBe("error");
   const headers = new Headers(init?.headers);
   for (const header of ["authorization", "cookie", "dpop"]) expect(headers.has(header)).toBe(false);
 });
@@ -257,4 +258,25 @@ it("refreshes 129 simultaneous authors without refetching their profiles", async
   expect(fetch).toHaveBeenCalledTimes(129);
   for (let refresh = 0; refresh < 3; refresh++) await act(async () => rerender({ threads: all() }));
   expect(fetch).toHaveBeenCalledTimes(129);
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("reads schema:name like version history and suggestions do, keeping one's own name", async () => {
+  const body = `<${webId}> <http://schema.org/name> "Alice Schema" .`;
+  const fetch = vi
+    .fn()
+    .mockResolvedValue(new Response(body, { headers: { "content-type": "text/turtle" } }));
+  const pod = session(fetch);
+  const threads = threadsFor();
+  const { result } = renderHook(() => useCommentAuthors(pod, threads));
+  await waitFor(() => expect(result.current(webId)).toBe("Alice Schema"));
+});
+
+it("does not let another author's profile claim the viewer's own label", async () => {
+  const bob = "https://bob.example/profile/card#me";
+  const publicFetch = vi.fn().mockResolvedValue(await profile(bob, " you "));
+  const pod = session(vi.fn(), publicFetch);
+  const threads = threadsFor(bob);
+  const { result } = renderHook(() => useCommentAuthors(pod, threads));
+  await waitFor(() => expect(result.current(bob)).toBe("you (bob.example)"));
 });
