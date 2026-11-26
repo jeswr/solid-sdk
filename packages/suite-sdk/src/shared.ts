@@ -308,7 +308,6 @@ export async function readSharedInbox(options: ReadSharedInboxOptions): Promise<
       discovered,
       options.signal ? { signal: options.signal } : {},
     );
-    if (container === 401 || container === 403) return { status: "failed", reason: "forbidden" };
     if (container === 404) return { status: "none" };
     return {
       status: "ok",
@@ -318,6 +317,8 @@ export async function readSharedInbox(options: ReadSharedInboxOptions): Promise<
     };
   } catch {
     options.signal?.throwIfAborted();
+    // The inbox reader rejects a 401/403 listing rather than reading it as empty.
+    if (container === 401 || container === 403) return { status: "failed", reason: "forbidden" };
     return { status: "failed", reason: "network" };
   }
 }
