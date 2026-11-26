@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { NS } from "@jeswr/suite-vocab";
 import type { BlankNode, DatasetCore, Term } from "@rdfjs/types";
 import { LiteralAs, OptionalFrom, TermAs } from "@rdfjs/wrapper";
@@ -7,11 +8,19 @@ import { DataFactory, Store } from "n3";
 import { entities } from "./generated/model.js";
 import { categoryTree } from "./helpers.js";
 import { migrateMoney } from "./migration.js";
-import { MoneyNode, rdfAmount } from "./node.js";
+import { MoneyNode, rdfAmount, singleValue } from "./node.js";
 import { optionalLinks, required } from "./records.js";
-import type { Account, Balance, Category, Money, Transaction } from "./types.js";
+import type { Account, Balance, Category, Money, Transaction, TransactionLink } from "./types.js";
 import { instant, validateMoney, validateTransaction } from "./validation.js";
 import { V } from "./vocab.js";
+
+const OPTIONAL_LINKS: readonly TransactionLink[] = [
+  "category",
+  "payee",
+  "derivedFrom",
+  "debitAccount",
+  "creditAccount",
+];
 
 export class MoneyDocument {
   readonly dataset: DatasetCore;
@@ -68,9 +77,7 @@ export class MoneyDocument {
     const amount = this.node(required(node.amountNode));
     // Pod Money's previous fin:amount/fin:currency remain readable.
     const value = {
-      amount: required(
-        amount.amount ?? OptionalFrom.subjectPredicate(amount, `${NS.FINANCE}amount`, rdfAmount),
-      ),
+      amount: required(amount.amount ?? singleValue(amount, `${NS.FINANCE}amount`, rdfAmount)),
       currency: required(
         this.dataset.match(TermAs.term(amount), DataFactory.namedNode(V.currency)).size
           ? amount.currency
@@ -110,6 +117,7 @@ export class MoneyDocument {
         entities.CardPayment,
       ].find((entity) => node.types.has(entity.typeIri));
       const core = required(required(entity).parse(node.value, this.dataset));
+      const unreadableLinks = this.unreadableLinks(node, core);
       const result: Transaction = {
         id: node.value,
         account: core.account,
@@ -117,10 +125,44 @@ export class MoneyDocument {
         description: core.description ?? "Transaction",
         ...this.money(node),
         ...optionalLinks(core),
+        ...(unreadableLinks.length ? { unreadableLinks } : {}),
       };
       validateTransaction(result);
       return result;
     });
+  }
+  /**
+   * A present optional link that does not project would be erased by the next save, so a
+   * save of that record is refused. Reads still list the record without the link: one bad
+   * link must not make the rest of the ledger unreadable.
+   */
+  assertLinksReadable(node: MoneyNode, core: Partial<Transaction>): void {
+    if (this.unreadableLinks(node, core).length) throw new TypeError("Invalid transaction link");
+  }
+  /** The present optional links of `node` that `core` (its projection) does not carry. */
+  unreadableLinks(node: MoneyNode, core: Partial<Transaction>): TransactionLink[] {
+    return OPTIONAL_LINKS.filter(
+      (key) =>
+        core[key] === undefined &&
+        this.dataset.match(TermAs.term(node), DataFactory.namedNode(V[key])).size > 0,
+    );
+  }
+  /**
+   * Refuse any write that would replace or remove the stored record `id`: a transfer leg
+   * (legs change together) or a record holding an unreadable optional link. Check the
+   * record's own document before writing a copy elsewhere, such as a move to another shard.
+   */
+  assertTransactionWritable(id: string): void {
+    const node = this.node(id);
+    if (node.types.has(V.transferClass))
+      throw new TypeError("Transfer legs must be changed together");
+    this.assertLinksReadable(node, node);
+  }
+  /** Every IRI stored under an optional link of `id`, including values the read left out. */
+  linkIris(id: string, key: TransactionLink): string[] {
+    return [...this.dataset.match(DataFactory.namedNode(id), DataFactory.namedNode(V[key]))]
+      .filter((quad) => quad.object.termType === "NamedNode")
+      .map((quad) => quad.object.value);
   }
   categories(): Category[] {
     const categories = this.nodes(V.categoryClass).map((node) => {

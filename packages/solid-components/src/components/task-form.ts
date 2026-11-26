@@ -27,6 +27,24 @@ import { safeHref } from "./shared.js";
 /** `wf:Task` — the class IRI the form binds + the merge subject scan keys on. */
 const TASK_TYPE = "http://www.w3.org/2005/01/wf/flow#Task";
 
+/** `YYYY-MM-DDTHH:MM[:SS[.fff]]` with no `Z` or offset: what a datetime-local input yields. */
+const ZONELESS_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/;
+
+/**
+ * The due date when the form emitted a zoneless `xsd:dateTime`, as the instant the user
+ * meant: a datetime-local input is local time, but the model reads a zoneless literal as
+ * UTC, so it is converted here and the setter then writes an explicit `Z`. Undefined when
+ * the literal is absent, zoned, or not a zoneless dateTime (the model's read applies).
+ */
+function localDueDate(formGraph: Store, subject: string): Date | undefined {
+  const objects = formGraph.getObjects(subject, "http://www.w3.org/2005/01/wf/flow#dateDue", null);
+  const [only] = objects;
+  if (objects.length !== 1 || only?.termType !== "Literal") return undefined;
+  if (!ZONELESS_DATE_TIME.test(only.value)) return undefined;
+  const date = new Date(only.value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
 /**
  * An editable `wf:Task` form element.
  *
@@ -79,7 +97,7 @@ export class JeswrTaskForm extends AbstractFormElement {
     // assignee is a WebID (IRI security surface); the model setter does NOT filter,
     // so drop a non-http(s) value here (filter-on-write) rather than coerce it.
     target.assignee = safeHref(edited.assignee);
-    target.dueDate = edited.dueDate;
+    target.dueDate = localDueDate(formGraph, readSubject) ?? edited.dueDate;
     target.priority = edited.priority;
     // Stamp a fresh modified time on each save (the model has a typed setter).
     target.modified = new Date();

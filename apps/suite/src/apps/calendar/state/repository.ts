@@ -309,7 +309,18 @@ export async function loadRange(
     calendars.map(async (calendar) => {
       try {
         // eventsInRange expands each series exactly once with expandEvent, retaining source identity/ETag.
-        for (const item of await io.eventsInRange(calendar.container, from, to, timeZone))
+        for (const item of await io.eventsInRange(
+          calendar.container,
+          from,
+          to,
+          timeZone,
+          (url, error) =>
+            warnings.push({
+              calendarUrl: calendar.url,
+              title: `An event in ${calendar.title} could not be read (${url})`,
+              error,
+            }),
+        ))
           events.push({ ...item, id: JSON.stringify([item.url, item.data.start]), calendar });
       } catch (error) {
         warnings.push({

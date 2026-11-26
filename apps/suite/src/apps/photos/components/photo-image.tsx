@@ -16,7 +16,8 @@ export function usePhotoUrl(url: string | undefined) {
   const [attempt, setAttempt] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries the same URL
   useEffect(() => {
-    if (!url) return;
+    // Model values are already http(s)-only; never fetch anything else for an <img>.
+    if (!url || !/^https?:\/\//i.test(url)) return;
     let live = true;
     let objectUrl: string | undefined;
     const controller = new AbortController();

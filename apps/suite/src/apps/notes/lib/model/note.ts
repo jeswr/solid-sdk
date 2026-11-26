@@ -1,4 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import {
+  applyRevisionPolicy,
+  type BuildDocumentInput,
+  buildDocument,
+  DocumentDoc,
+  documentSubject,
+  type PodDocument,
+  parseDocument,
+  type Revision,
+} from "@jeswr/solid-docs/document";
+import { DEFAULT_FORMAT, NS } from "@jeswr/solid-docs/vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import {
   LiteralAs,
@@ -13,17 +25,6 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, type Store } from "n3";
-import {
-  applyRevisionPolicy,
-  type BuildDocumentInput,
-  buildDocument,
-  DocumentDoc,
-  documentSubject,
-  type PodDocument,
-  parseDocument,
-  type Revision,
-} from "../../../docs/lib/model/document";
-import { DEFAULT_FORMAT, NS } from "../../../docs/lib/model/vocab";
 import { assertLabels } from "../validation";
 
 /** Notes reminders retain the scheduling wire namespace specified for this model. */

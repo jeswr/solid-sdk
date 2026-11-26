@@ -1,13 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
+import { isDirectChild } from "@jeswr/solid-docs/layout";
+import { DCT, OA, PD, RDF_TYPE } from "@jeswr/solid-docs/vocab";
 import { httpIri, SheetResource, workbookLayout } from "@jeswr/solid-sheets";
 import { LiteralAs, LiteralFrom, OptionalAs, OptionalFrom } from "@rdfjs/wrapper";
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { isDirectChild } from "../../../docs/lib/model/layout";
 import { deleteRdf, readRdf, writeRdf } from "../../../docs/lib/model/rdf-io";
-import { DCT, OA, PD, RDF_TYPE } from "../../../docs/lib/model/vocab";
 import { type CellAnchor, formatCellSelector, parseCellSelector } from "./selector";
 
 const ANNOTATION = "http://www.w3.org/ns/oa#";

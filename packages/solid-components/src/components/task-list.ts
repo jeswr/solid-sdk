@@ -100,10 +100,18 @@ function collectTasks(graph: Store): Task[] {
   const out: Task[] = [];
   for (const quad of graph.getQuads(null, DataFactory.namedNode(RDF_TYPE), null, null)) {
     if (quad.object.value !== TASK_CLASS) continue;
+    // Pod data is untrusted: a blank-node subject, or a NamedNode that is not a safe
+    // absolute IRI, is rejected by the Task constructor. Skip it so one malformed task
+    // cannot take down the whole list (a blank node's label must never be read as an IRI).
+    if (quad.subject.termType !== "NamedNode") continue;
     const subject = quad.subject.value;
     if (seen.has(subject)) continue;
     seen.add(subject);
-    out.push(new Task(subject, graph, DataFactory));
+    try {
+      out.push(new Task(subject, graph, DataFactory));
+    } catch {
+      // unsafe subject IRI: not renderable as a task
+    }
   }
   return out;
 }

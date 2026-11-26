@@ -1,0 +1,110 @@
+{
+  "shapesBase": "https://jeswr.org/ns/photos/shapes#",
+  "prefixes": {
+    "schema": "https://schema.org/",
+    "exif": "http://www.w3.org/2003/12/exif/ns#",
+    "geo": "http://www.w3.org/2003/01/geo/wgs84_pos#",
+    "dct": "http://purl.org/dc/terms/",
+    "prov": "http://www.w3.org/ns/prov#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "targetClass": "https://schema.org/Photograph",
+      "name": "Photograph",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "name": {
+          "sanitizeText": false
+        },
+        "description": {
+          "sanitizeText": false
+        },
+        "keywords": {
+          "sanitizeText": false
+        },
+        "exifMake": {
+          "sanitizeText": false
+        },
+        "exifModel": {
+          "sanitizeText": false
+        },
+        "exifLensModel": {
+          "sanitizeText": false
+        }
+      }
+    },
+    {
+      "targetClass": "https://schema.org/ImageGallery",
+      "name": "ImageGallery",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "name": {
+          "sanitizeText": false
+        },
+        "description": {
+          "sanitizeText": false
+        }
+      }
+    },
+    {
+      "targetClass": "https://schema.org/ListItem",
+      "name": "ListItem",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "targetClass": "http://www.w3.org/2003/01/geo/wgs84_pos#Point",
+      "name": "GeoPoint",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "targetClass": "http://www.w3.org/ns/prov#Entity",
+      "name": "Trash",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "state": {
+          "sanitizeText": false
+        }
+      }
+    },
+    {
+      "targetClass": "https://schema.org/ImageObject",
+      "name": "ImageObject",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "name": {
+          "sanitizeText": false
+        },
+        "description": {
+          "sanitizeText": false
+        },
+        "keywords": {
+          "sanitizeText": false
+        },
+        "exifMake": {
+          "sanitizeText": false
+        },
+        "exifModel": {
+          "sanitizeText": false
+        },
+        "exifLensModel": {
+          "sanitizeText": false
+        }
+      }
+    }
+  ]
+}

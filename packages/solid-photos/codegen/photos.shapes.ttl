@@ -1,0 +1,100 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Starting point: solid-federation-vocab/sectors/media/media.shacl.ttl.
+# The sector covers music, playback and licensing; it has no photograph/EXIF,
+# WGS84 capture-point, schema:ImageGallery/ListItem or PROV trash shape.
+# Retain its open-by-default, severity-graded singleton string/date idioms, but
+# project only the pre-existing schema.org/EXIF/geo/DCT/PROV wire contract here.
+# Omit ALL sector target classes and their properties: CreativeWork title/artist/
+# licence/duration; MusicRecording ISRC/recordingOf; PlaybackEvent work/participant/
+# time/account/service/msPlayed/completion/loved; PlayedAtInstant timestamp;
+# ListeningHistory subject/parts; UsageLicense work/parties/validFrom; Track title/
+# artist/album/duration/ISRC; MusicComposition/PodcastEpisode title; Artist name;
+# Album/Playlist title; MusicGroup; MediaAccount holder; ListeningActivity work.
+# These are not aliases for this app's identifiers. No sector MUST is relaxed
+# for its original focus nodes, and no new data IRIs or migration are introduced.
+# Package profile: singleton fields optional, matching readable typed shells;
+# literals use exactly the datatypes the app writes, not datatype unions.
+# schema:ImageObject has a separate read projection for PM imports; edits never
+# migrate its type. New photo builds use only schema:Photograph.
+# Omit schema:geo and schema:itemListElement: BlankNodeOrIRI links and repeated
+# children are outside closed admission. Minimal package-local term views own
+# these links and blank-node reads; named GeoPoint/ListItem fields are generated.
+# ISO lexical normalization, paired coordinates, EXIF ranges, case-insensitive
+# keyword deduplication and ordered/unique album membership stay facade policy.
+@prefix schema: <https://schema.org/> .
+@prefix exif: <http://www.w3.org/2003/12/exif/ns#> .
+@prefix geo: <http://www.w3.org/2003/01/geo/wgs84_pos#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+[] a sh:NodeShape ;
+    sh:targetClass schema:Photograph ;
+    sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:contentUrl ; sh:name "contentUrl" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:thumbnailUrl ; sh:name "thumbnailUrl" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:keywords ; sh:name "keywords" ; sh:datatype xsd:string ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:width ; sh:name "width" ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:height ; sh:name "height" ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:dateCreated ; sh:name "dateCreated" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:make ; sh:name "exifMake" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:model ; sh:name "exifModel" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:lensModel ; sh:name "exifLensModel" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:focalLength ; sh:name "exifFocalLength" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:fNumber ; sh:name "exifFNumber" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:exposureTime ; sh:name "exifExposureTime" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:isoSpeedRatings ; sh:name "exifIso" ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:orientation ; sh:name "exifOrientation" ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path prov:wasGeneratedBy ; sh:name "restoreActivity" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+[] a sh:NodeShape ;
+    sh:targetClass schema:ImageGallery ;
+    sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:dateCreated ; sh:name "dateCreated" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:image ; sh:name "coverUrl" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:hasPart ; sh:name "legacyMembers" ; sh:nodeKind sh:IRI ; sh:severity sh:Info ] .
+
+[] a sh:NodeShape ;
+    sh:targetClass schema:ListItem ;
+    sh:property [ sh:path schema:item ; sh:name "item" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+[] a sh:NodeShape ;
+    sh:targetClass geo:Point ;
+    sh:property [ sh:path geo:lat ; sh:name "lat" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path geo:long ; sh:name "long" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+[] a sh:NodeShape ;
+    sh:targetClass prov:Entity ;
+    sh:property [ sh:path schema:creativeWorkStatus ; sh:name "state" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path prov:wasDerivedFrom ; sh:name "originalUrl" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path prov:wasAttributedTo ; sh:name "actor" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path prov:invalidatedAtTime ; sh:name "trashedAt" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path prov:wasGeneratedBy ; sh:name "restoreActivity" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+[] a sh:NodeShape ;
+    sh:targetClass schema:ImageObject ;
+    sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:contentUrl ; sh:name "contentUrl" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:thumbnailUrl ; sh:name "thumbnailUrl" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:keywords ; sh:name "keywords" ; sh:datatype xsd:string ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:width ; sh:name "width" ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:height ; sh:name "height" ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path schema:dateCreated ; sh:name "dateCreated" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:make ; sh:name "exifMake" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:model ; sh:name "exifModel" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:lensModel ; sh:name "exifLensModel" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:focalLength ; sh:name "exifFocalLength" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:fNumber ; sh:name "exifFNumber" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:exposureTime ; sh:name "exifExposureTime" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:isoSpeedRatings ; sh:name "exifIso" ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path exif:orientation ; sh:name "exifOrientation" ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+    sh:property [ sh:path prov:wasGeneratedBy ; sh:name "restoreActivity" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .

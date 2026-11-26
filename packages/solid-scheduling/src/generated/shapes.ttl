@@ -1,27 +1,49 @@
 @prefix core: <https://w3id.org/jeswr/core#>.
+@prefix dct: <http://purl.org/dc/terms/>.
+@prefix jsched: <https://jeswr.org/ns/sectors/scheduling#>.
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
 @prefix sched: <https://w3id.org/jeswr/sectors/scheduling#>.
+@prefix schema: <https://schema.org/>.
 @prefix sh: <http://www.w3.org/ns/shacl#>.
 @prefix shapes: <https://w3id.org/jeswr/sectors/scheduling/shapes#>.
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
 
+shapes:06ddd8f06ac41a70c95dbbe04aee2013ea007dad500a85c26ba6bb85d583942c-n16 rdf:first sched:timeZone;
+    rdf:rest rdf:nil.
 shapes:09742be511b22df14c562d7bb5ec15a4abe653c45520d006089fbeb6f2ef0382-Calendar-organizer sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path sched:organizer;
     sh:severity sh:Info.
+shapes:1f9bae3a63cbdc9b43aa0a39ae42253b6fa262fd86c824fc1dd39156f5e55d6d-n18 rdf:first "MONTHLY";
+    rdf:rest shapes:3da968704628651bc3ff411ea9848224e15ad603133be8bba963de648b4bfe37-n2.
 shapes:241933519032295744f681557d0c72735dfbc64db63d646c665124fcddb139ca-Task-startTime sh:datatype xsd:dateTime;
     sh:maxCount 1;
     sh:path sched:startTime;
     sh:severity sh:Info.
-shapes:2c585929c9d8c5534d0e869336f95e0728c1197f9a6f19c30e91b6af0a8550b8-n1 rdf:first "WEEKLY";
-    rdf:rest shapes:74c6cfc1062782d253d4e9ad1e6b1a2280197e990afd742a17b24ee4139532a5-n2.
+shapes:31d09f4d001ac9e161e4abbc93d1b775f0f6260d243ce6c67c8fd3ae8194e472-n8 rdf:first schema:location;
+    rdf:rest shapes:b38266ee5722d75f1f722b7ceb913c41280123ec723c6205b7cbdf0e8bc909a2-n6.
+shapes:383aabded53e79081e446b141a5f101cd7fdd234f7cb8a65fb803b6e5ac6e771-Calendar-title sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "title";
+    sh:path dct:title;
+    sh:severity sh:Violation.
+shapes:3da968704628651bc3ff411ea9848224e15ad603133be8bba963de648b4bfe37-n2 rdf:first "YEARLY";
+    rdf:rest rdf:nil.
 shapes:43ebcc4a748b193f78ed06ead695355eae81a3b980148edf71598e123009f8c3-RecurrenceRule-count sh:datatype xsd:positiveInteger;
     sh:maxCount 1;
     sh:path sched:count;
     sh:severity sh:Info.
+shapes:44fd7b53721fd4b6e7fe39610e864ca4326eeb9b325f59528ce710208342c1cc-n7 rdf:first schema:description;
+    rdf:rest shapes:9c7bce7020fca6f6ab558ad02dd13d9f5c52326bb8e3c1b5cfc31e0ec7959dad-n13.
 shapes:4eec8331730c285977a072ff3d869fc644213a47dfc9ff923b0e64b9dc4b0c7f-Task-completedAt sh:datatype xsd:dateTime;
     sh:maxCount 1;
     sh:path sched:completedAt;
+    sh:severity sh:Info.
+shapes:5298e5d060d36791fb2cdd9975a2a91fc78bb12b15518a8fd8d5bf0d7b353b99-CalendarEvent-identifier sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "uid";
+    sh:path _:path_0abcc990d1ad1cf2df13bedfd913bc0f5997e5bb86849b191fa89b763c1b963a;
     sh:severity sh:Info.
 shapes:69cf6b34c67a2267b8b9391d46ed7f8e6d8c5a5dbdcf34ebb3f1ca9d0cdb74d9-Calendar-summary sh:datatype xsd:string;
     sh:maxCount 1;
@@ -32,15 +54,23 @@ shapes:71ca322ea752190d0af472a7fba2f4518803e6a96df4ca3aad6525a728b7dd77-Task-com
     sh:maxCount 1;
     sh:path sched:completed;
     sh:severity sh:Info.
-shapes:74c6cfc1062782d253d4e9ad1e6b1a2280197e990afd742a17b24ee4139532a5-n2 rdf:first "MONTHLY";
-    rdf:rest shapes:c21153d8d391a625e39b80f8dfb9acba97bbfa7a999e9c8271a5c454865011e8-n3.
+shapes:77960aba8b8d4a25b6aaee0520f22bde07c9da2469807b24816fc815cbc36284-n15 rdf:first <http://schema.org/color>;
+    rdf:rest rdf:nil.
 shapes:795253789b70f18151ecad61afaef19fa2cc65148f398dc29458ffe488b337ca-Task-recurrence sh:class sched:RecurrenceRule;
     sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path sched:recurrence;
     sh:severity sh:Info.
-shapes:8000d2fdc9fb1f0c378fac29666be36e7feb0bd2e23de3322977d12e47e7ae76-n0 rdf:first "DAILY";
-    rdf:rest shapes:2c585929c9d8c5534d0e869336f95e0728c1197f9a6f19c30e91b6af0a8550b8-n1.
+shapes:7f2938f343367de7c7f2423f4e92902c16b28667f451d0d9e7acb075fc4ba459-CalendarEvent-description sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "description";
+    sh:path _:path_da35a189f956b2116c2e3783e0121967783305e4a078644a84460d7dd48c4e7b;
+    sh:severity sh:Info.
+shapes:80d16bf2eca685e19c5682655794658c3d0bfeba998d829f60de57643f4d90e8-CalendarEvent-location sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "location";
+    sh:path _:path_0ef154989595bd1c282921b95698a3d1a5688b59f50c83192e232d1b52079dd0;
+    sh:severity sh:Info.
 shapes:840b6d1da4111a64bd0e54313222074ae471a3ec5216221d50f7549cb9a45723-RecurrenceRule-interval sh:datatype xsd:positiveInteger;
     sh:maxCount 1;
     sh:path sched:interval;
@@ -49,6 +79,20 @@ shapes:868ca9e6b009ddcd18b6f95c776e038fa99c5f1c5e42bd22464794ed9e1685ca-Task-org
     sh:nodeKind sh:IRI;
     sh:path sched:organizer;
     sh:severity sh:Info.
+shapes:8c909e8c16cde21021f5ae167416fbc08ad67ab1d021f9b307181a62e4c4a6b4-n21 rdf:first schema:color;
+    rdf:rest shapes:77960aba8b8d4a25b6aaee0520f22bde07c9da2469807b24816fc815cbc36284-n15.
+shapes:8ebba3e6739e7f0ecd4d00b18d2a2165912fec9bf1fdc7aeeee9e475fa16686e-n4 rdf:first <http://schema.org/name>;
+    rdf:rest rdf:nil.
+shapes:9c7bce7020fca6f6ab558ad02dd13d9f5c52326bb8e3c1b5cfc31e0ec7959dad-n13 rdf:first <http://schema.org/description>;
+    rdf:rest rdf:nil.
+shapes:9d7d8c4e32b62a6a841db42a17b03dc2afe48a96a716f2dbd32303fb8a301b8a-n14 rdf:first schema:identifier;
+    rdf:rest shapes:b0bb3fa783695c1133b56bbfdc6b315824dedb73aba3590a456d61ebf08da4aa-n5.
+shapes:CalendarDocumentShape a sh:NodeShape;
+    sh:property shapes:383aabded53e79081e446b141a5f101cd7fdd234f7cb8a65fb803b6e5ac6e771-Calendar-title, shapes:e0e96ab8e782b2612637364b78b4107e89669e042d1e55152a93fad9ca8fe41c-Calendar-color;
+    sh:targetClass jsched:Calendar.
+shapes:CalendarEventShape a sh:NodeShape;
+    sh:property shapes:5298e5d060d36791fb2cdd9975a2a91fc78bb12b15518a8fd8d5bf0d7b353b99-CalendarEvent-identifier, shapes:7f2938f343367de7c7f2423f4e92902c16b28667f451d0d9e7acb075fc4ba459-CalendarEvent-description, shapes:80d16bf2eca685e19c5682655794658c3d0bfeba998d829f60de57643f4d90e8-CalendarEvent-location, shapes:cc6a5eb3d00a1e3187850de11c7fbcb8c95770fa7c45a7d21ba4cd318d705f2e-CalendarEvent-timeZone, shapes:d5a26841866eca29d5d8c5777e5ac528b4f918e0c40341975017219b2735ffd2-CalendarEvent-name;
+    sh:targetClass <http://schema.org/Event>, jsched:CalendarEvent, schema:Event, sched:CalendarEvent.
 shapes:CalendarShape a sh:NodeShape;
     sh:property shapes:09742be511b22df14c562d7bb5ec15a4abe653c45520d006089fbeb6f2ef0382-Calendar-organizer, shapes:69cf6b34c67a2267b8b9391d46ed7f8e6d8c5a5dbdcf34ebb3f1ca9d0cdb74d9-Calendar-summary, shapes:b60b69c96f4c4a6bf931983844c5e16bfdf24ce34ebc6f05a7180eefe6596fd1-Calendar-description;
     sh:targetClass sched:Calendar.
@@ -62,6 +106,14 @@ shapes:a126cbe8e9c9a199bd8766005480c3eda38b42869ecffcdb86146b08e806b5f5-Task-des
     sh:maxCount 1;
     sh:path sched:description;
     sh:severity sh:Info.
+shapes:ab9a7253a883afdfed419a584f53694e2317e9071a2051d6f8beec105ce43f7c-n1 rdf:first "DAILY";
+    rdf:rest shapes:ca2d63fb2b6a2d4f51f382d63acbce668cca8042f85f38e6b31e03c7bf54fbc3-n3.
+shapes:b0bb3fa783695c1133b56bbfdc6b315824dedb73aba3590a456d61ebf08da4aa-n5 rdf:first <http://schema.org/identifier>;
+    rdf:rest rdf:nil.
+shapes:b12a76723025dc497825227d5c03b4012137221039c8ab6f60349f5542b8dcd8-n20 rdf:first schema:name;
+    rdf:rest shapes:8ebba3e6739e7f0ecd4d00b18d2a2165912fec9bf1fdc7aeeee9e475fa16686e-n4.
+shapes:b38266ee5722d75f1f722b7ceb913c41280123ec723c6205b7cbdf0e8bc909a2-n6 rdf:first <http://schema.org/location>;
+    rdf:rest rdf:nil.
 shapes:b60b69c96f4c4a6bf931983844c5e16bfdf24ce34ebc6f05a7180eefe6596fd1-Calendar-description sh:datatype xsd:string;
     sh:maxCount 1;
     sh:path sched:description;
@@ -75,19 +127,42 @@ shapes:c1490be46b569b9d1e0339f3ad089dbe55fd62ed5ad5b8158f85e644a00837cf-Task-sum
     sh:minCount 1;
     sh:path sched:summary;
     sh:severity sh:Violation.
-shapes:c21153d8d391a625e39b80f8dfb9acba97bbfa7a999e9c8271a5c454865011e8-n3 rdf:first "YEARLY";
-    rdf:rest rdf:nil.
 shapes:c6d4f4889a0f5262a741c04144788e9feb9591acea9ee5f1dcfb28e53b319ce9-Task-inCalendar sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path sched:inCalendar;
+    sh:severity sh:Info.
+shapes:ca2d63fb2b6a2d4f51f382d63acbce668cca8042f85f38e6b31e03c7bf54fbc3-n3 rdf:first "WEEKLY";
+    rdf:rest shapes:1f9bae3a63cbdc9b43aa0a39ae42253b6fa262fd86c824fc1dd39156f5e55d6d-n18.
+shapes:cc6a5eb3d00a1e3187850de11c7fbcb8c95770fa7c45a7d21ba4cd318d705f2e-CalendarEvent-timeZone sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "timeZone";
+    sh:path _:path_7bf8fab96cc8943414004228276f294f1dee7559ab16c01e10a6da49376e44cc;
+    sh:severity sh:Info.
+shapes:d5a26841866eca29d5d8c5777e5ac528b4f918e0c40341975017219b2735ffd2-CalendarEvent-name sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "name";
+    sh:path _:path_93778450af0f48f50ba59416996549c998af18e6379450acbf9e497d00ff3511;
+    sh:severity sh:Info.
+shapes:e0e96ab8e782b2612637364b78b4107e89669e042d1e55152a93fad9ca8fe41c-Calendar-color sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "color";
+    sh:path _:path_9c3ca075d61011473476aaf97d91bc8c89645e6978d6dc8d0c4670a4215ac882;
     sh:severity sh:Info.
 shapes:f3bfafc219814a0dfef7c1550a899a66d7f0863cee4242ea072ce5b27875aac8-Task-dueTime sh:datatype xsd:dateTime;
     sh:maxCount 1;
     sh:path sched:dueTime;
     sh:severity sh:Info.
 shapes:f6714efdb1ab05d28d3769675eb252b1f5aab6b3530cb199ef6f2cb1fb013ea4-RecurrenceRule-frequency sh:datatype xsd:string;
-    sh:in shapes:8000d2fdc9fb1f0c378fac29666be36e7feb0bd2e23de3322977d12e47e7ae76-n0;
+    sh:in shapes:ab9a7253a883afdfed419a584f53694e2317e9071a2051d6f8beec105ce43f7c-n1;
     sh:maxCount 1;
     sh:minCount 1;
     sh:path sched:frequency;
     sh:severity sh:Violation.
+shapes:fe7bcb04e21adff7c77f273267941dcda70f2aa87bdbdc126bf23259158efb88-n17 rdf:first jsched:timeZone;
+    rdf:rest shapes:06ddd8f06ac41a70c95dbbe04aee2013ea007dad500a85c26ba6bb85d583942c-n16.
+_:path_0abcc990d1ad1cf2df13bedfd913bc0f5997e5bb86849b191fa89b763c1b963a sh:alternativePath shapes:9d7d8c4e32b62a6a841db42a17b03dc2afe48a96a716f2dbd32303fb8a301b8a-n14.
+_:path_0ef154989595bd1c282921b95698a3d1a5688b59f50c83192e232d1b52079dd0 sh:alternativePath shapes:31d09f4d001ac9e161e4abbc93d1b775f0f6260d243ce6c67c8fd3ae8194e472-n8.
+_:path_7bf8fab96cc8943414004228276f294f1dee7559ab16c01e10a6da49376e44cc sh:alternativePath shapes:fe7bcb04e21adff7c77f273267941dcda70f2aa87bdbdc126bf23259158efb88-n17.
+_:path_93778450af0f48f50ba59416996549c998af18e6379450acbf9e497d00ff3511 sh:alternativePath shapes:b12a76723025dc497825227d5c03b4012137221039c8ab6f60349f5542b8dcd8-n20.
+_:path_9c3ca075d61011473476aaf97d91bc8c89645e6978d6dc8d0c4670a4215ac882 sh:alternativePath shapes:8c909e8c16cde21021f5ae167416fbc08ad67ab1d021f9b307181a62e4c4a6b4-n21.
+_:path_da35a189f956b2116c2e3783e0121967783305e4a078644a84460d7dd48c4e7b sh:alternativePath shapes:44fd7b53721fd4b6e7fe39610e864ca4326eeb9b325f59528ce710208342c1cc-n7.

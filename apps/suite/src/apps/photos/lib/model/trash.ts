@@ -1,108 +1,23 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 import { RdfFetchError } from "@jeswr/fetch-rdf";
-import type { DatasetCore } from "@rdfjs/types";
 import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  OptionalAs,
-  OptionalFrom,
-  SetFrom,
-} from "@rdfjs/wrapper";
+  buildPhoto,
+  buildTrash,
+  documentUrl,
+  identifier,
+  parsePhoto,
+  parseTrash,
+  RestoreReceipt,
+  TrashDoc,
+  type TrashRecord,
+} from "@jeswr/solid-photos";
+import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
 import { isomorphic } from "rdf-isomorphic";
 import { PhotoIoError, type PhotoStorage } from "./io.js";
-import { buildPhoto, type Photo, parsePhoto, RestoreReceipt } from "./photograph.js";
-import { documentUrl, httpIri, identifier, isoDate } from "./validation.js";
-import { RDF_TYPE, SCHEMA } from "./vocab.js";
 
-const PROV = "http://www.w3.org/ns/prov#";
-export interface TrashRecord {
-  originalUrl: string;
-  trashedAt: string;
-  actor: string;
-  /** Absent on ordinary/legacy trash records. Purging permanently forbids restore. */
-  state?: "restoring" | "purging";
-  /** Shared with the created live description to identify this restore across retries. */
-  restoreActivity?: string;
-}
-export class TrashDoc extends RestoreReceipt {
-  get state(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${SCHEMA}creativeWorkStatus`, LiteralAs.string);
-  }
-  set state(value: string | undefined) {
-    OptionalAs.object(this, `${SCHEMA}creativeWorkStatus`, value, LiteralFrom.string);
-  }
-  get types(): Set<string> {
-    return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
-  }
-  get originalUrl(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${PROV}wasDerivedFrom`, NamedNodeAs.string);
-  }
-  set originalUrl(value: string | undefined) {
-    OptionalAs.object(
-      this,
-      `${PROV}wasDerivedFrom`,
-      value === undefined ? undefined : documentUrl(value),
-      NamedNodeFrom.string,
-    );
-  }
-  get actor(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${PROV}wasAttributedTo`, NamedNodeAs.string);
-  }
-  set actor(value: string | undefined) {
-    OptionalAs.object(
-      this,
-      `${PROV}wasAttributedTo`,
-      value === undefined ? undefined : httpIri(value),
-      NamedNodeFrom.string,
-    );
-  }
-  get trashedAt(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, `${PROV}invalidatedAtTime`, LiteralAs.date);
-  }
-  set trashedAt(value: Date | undefined) {
-    OptionalAs.object(this, `${PROV}invalidatedAtTime`, value, LiteralFrom.dateTime);
-  }
-}
+export { buildTrash, parseTrash, TrashDoc, type TrashRecord };
 
-export function buildTrash(url: string, photo: Photo, record: TrashRecord) {
-  const dataset = buildPhoto(record.originalUrl, photo);
-  const doc = new TrashDoc(`${documentUrl(url)}#trash`, dataset, DataFactory);
-  doc.types.add(`${PROV}Entity`);
-  doc.originalUrl = record.originalUrl;
-  doc.actor = record.actor;
-  doc.state = record.state;
-  doc.restoreActivity = record.restoreActivity;
-  doc.trashedAt = new Date(isoDate(record.trashedAt));
-  return dataset;
-}
-export function parseTrash(
-  url: string,
-  dataset: DatasetCore,
-): { photo: Photo; record: TrashRecord } {
-  const doc = new TrashDoc(`${documentUrl(url)}#trash`, dataset, DataFactory);
-  if (!doc.types.has(`${PROV}Entity`) || !doc.originalUrl || !doc.actor || !doc.trashedAt)
-    throw new TypeError("Invalid trash record");
-  const state = doc.state;
-  if (state !== undefined && state !== "restoring" && state !== "purging")
-    throw new TypeError("Invalid trash state");
-  const photo = parsePhoto(doc.originalUrl, dataset);
-  if (!photo) throw new TypeError("Missing trashed photograph");
-  return {
-    photo,
-    record: {
-      originalUrl: documentUrl(doc.originalUrl),
-      actor: httpIri(doc.actor),
-      trashedAt: doc.trashedAt.toISOString(),
-      ...(state !== undefined ? { state } : {}),
-      ...(doc.restoreActivity !== undefined
-        ? { restoreActivity: httpIri(doc.restoreActivity) }
-        : {}),
-    },
-  };
-}
 function requireEtag(etag: string | null): string {
   if (!etag || etag.startsWith("W/")) throw new TypeError("Trash operations require a strong ETag");
   return etag;

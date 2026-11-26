@@ -36,11 +36,21 @@ export function folderCounts(mailbox: MailboxDataset) {
 function sent(m: Message): number {
   return m.dateSent?.getTime() ?? 0;
 }
+/**
+ * Generated live sets answer `has` by re-validating every member, so membership checks in a
+ * per-message loop must run against a plain snapshot read once.
+ */
+function snapshot(live: Iterable<string> | undefined): Set<string> {
+  return new Set(live ?? []);
+}
 export function threadMessages(mailbox: MailboxDataset, thread: string): Message[] {
-  const members = mailbox.findThread(thread)?.messageIris ?? new Set<string>();
+  const members = snapshot(mailbox.findThread(thread)?.messageIris);
   return [...mailbox.messages]
     .filter((m) => members.has(m.value) || m.partOfThread === thread)
-    .sort((a, b) => sent(a) - sent(b) || a.value.localeCompare(b.value));
+    .sort(byDate);
+}
+function byDate(a: Message, b: Message): number {
+  return sent(a) - sent(b) || a.value.localeCompare(b.value);
 }
 /** Stable newest-first paging over the loaded snapshot. */
 export interface ThreadPageRow {
@@ -83,12 +93,12 @@ function threadIndex(mailbox: MailboxDataset) {
 export function pageThreads(mailbox: MailboxDataset, folder: string, offset = 0, limit = 50) {
   if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1)
     throw new TypeError("Invalid page");
-  const members = mailbox.findFolder(folder)?.messageIris ?? new Set<string>();
+  const members = snapshot(mailbox.findFolder(folder)?.messageIris);
   const inFolder = (m: Message) => members.has(m.value) || m.folderIris.has(folder);
   const threads = threadIndex(mailbox).rows.filter((row) => row.messages.some(inFolder));
   const dates = new Map<string, number>();
   for (const row of threads) {
-    row.messages.sort((a, b) => sent(a) - sent(b) || a.value.localeCompare(b.value));
+    row.messages.sort(byDate);
     dates.set(row.id, sent(row.messages[row.messages.length - 1]!));
   }
   threads.sort((a, b) => dates.get(b.id)! - dates.get(a.id)! || a.id.localeCompare(b.id));

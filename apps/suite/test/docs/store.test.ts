@@ -464,6 +464,38 @@ describe("listing", () => {
   });
 });
 
+describe("documents written by other tools", () => {
+  it("keeps language-tagged content, revision bodies and the creation date through a metadata-only save", async () => {
+    const s = await server();
+    s.resources.set(DOC, {
+      body: `@prefix pd: <https://jeswr.org/ns/pod-docs#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<${DOC}#it> a pd:Document ; dct:identifier "other-tool" ; dct:title "Trip"@en ;
+  pd:body "<p>précieux</p>"@fr ; dct:created "2024-01-01"^^xsd:date ;
+  pd:currentRevision <${DOC}#rev-0> .
+<${DOC}#rev-0> a prov:Entity ; pd:body "<p>v0</p>"@fr ;
+  prov:generatedAtTime "2024-01-01T00:00:00Z"^^xsd:dateTime .`,
+      etag: '"other"',
+      contentType: "text/turtle",
+    });
+    const store = new DocsStore(POD, WEBID, s.fetchImpl);
+    const stored = await store.read(DOC);
+    assert(stored);
+    const saved = await store.save(stored, { title: "Renamed" }, { wait: WAIT });
+    const reread = await store.read(DOC);
+    for (const data of [saved.data, reread?.data]) {
+      expect(data).toMatchObject({
+        title: "Renamed",
+        body: "<p>précieux</p>",
+        created: "2024-01-01T00:00:00.000Z",
+      });
+      expect(data?.revisions.map((revision) => revision.body)).toContain("<p>v0</p>");
+    }
+  });
+});
+
 describe("snapshot conflicts", () => {
   it.each([
     undefined,

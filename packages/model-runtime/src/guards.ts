@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The guard inventory — the single audited home for the untrusted-input filters
  * that the six hand-written `@jeswr` data-model packages each duplicated. Every
@@ -91,6 +92,28 @@ export function isXsdName(value: string, kind: "Name" | "NCName" | "NMTOKEN"): b
     first = false;
   }
   return true;
+}
+
+/**
+ * The closed string patterns with a reviewed runtime projection. `upper-alpha-3` is
+ * the projection of exactly the SHACL `sh:pattern "^[A-Z]{3}$"` (the ISO 4217 alphabetic
+ * currency-code SHAPE; membership in the ISO list is domain policy, not checked here).
+ */
+export type StringPattern = "upper-alpha-3";
+
+/** True for exactly three ASCII uppercase letters (`A`–`Z`), nothing else. */
+export function isUpperAlpha3(value: unknown): value is string {
+  if (typeof value !== "string" || value.length !== 3) return false;
+  for (let i = 0; i < 3; i++) {
+    const c = value.charCodeAt(i);
+    if (c < 0x41 || c > 0x5a) return false;
+  }
+  return true;
+}
+
+/** Apply a closed {@link StringPattern} to a string value. Unknown patterns fail closed. */
+export function matchesStringPattern(pattern: StringPattern, value: string): boolean {
+  return pattern === "upper-alpha-3" ? isUpperAlpha3(value) : false;
 }
 
 /** Validate both the resource and its derived subject, preserving lexical identity. */

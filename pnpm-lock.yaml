@@ -1514,6 +1514,9 @@ importers:
       '@jeswr/pod-connectors':
         specifier: workspace:*
         version: link:../../packages/pod-connectors
+      '@jeswr/solid-mail':
+        specifier: workspace:*
+        version: link:../../packages/solid-mail
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -1587,6 +1590,12 @@ importers:
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
+      '@jeswr/solid-mail':
+        specifier: workspace:*
+        version: link:../../../packages/solid-mail
+      '@jeswr/solid-session-restore':
+        specifier: workspace:*
+        version: link:../../../packages/solid-session-restore
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../../packages/suite-ui
@@ -2242,6 +2251,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/solid-photos':
+        specifier: workspace:*
+        version: link:../../packages/solid-photos
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -2315,6 +2327,12 @@ importers:
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
+      '@jeswr/solid-photos':
+        specifier: workspace:*
+        version: link:../../../packages/solid-photos
+      '@jeswr/solid-session-restore':
+        specifier: workspace:*
+        version: link:../../../packages/solid-session-restore
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../../packages/suite-ui
@@ -2484,6 +2502,9 @@ importers:
       '@jeswr/solid-dav-bridge':
         specifier: workspace:*
         version: link:../../packages/solid-dav-bridge
+      '@jeswr/solid-docs':
+        specifier: workspace:*
+        version: link:../../packages/solid-docs
       '@jeswr/solid-drawing':
         specifier: workspace:*
         version: link:../../packages/solid-drawing
@@ -2496,6 +2517,9 @@ importers:
       '@jeswr/solid-listening':
         specifier: workspace:*
         version: link:../../packages/solid-listening
+      '@jeswr/solid-mail':
+        specifier: workspace:*
+        version: link:../../packages/solid-mail
       '@jeswr/solid-media-log':
         specifier: workspace:*
         version: link:../../packages/solid-media-log
@@ -2505,6 +2529,9 @@ importers:
       '@jeswr/solid-offline':
         specifier: workspace:*
         version: link:../../packages/solid-offline
+      '@jeswr/solid-photos':
+        specifier: workspace:*
+        version: link:../../packages/solid-photos
       '@jeswr/solid-places':
         specifier: workspace:*
         version: link:../../packages/solid-places
@@ -2514,6 +2541,9 @@ importers:
       '@jeswr/solid-recipe':
         specifier: workspace:*
         version: link:../../packages/solid-recipe
+      '@jeswr/solid-scheduling':
+        specifier: workspace:*
+        version: link:../../packages/solid-scheduling
       '@jeswr/solid-sheets':
         specifier: workspace:*
         version: link:../../packages/solid-sheets
@@ -4704,6 +4734,37 @@ importers:
         specifier: ^4.1.8
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  packages/shacl-forms:
+    dependencies:
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.0.0
+        version: 2.5.3
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
   packages/solid-a2a:
     dependencies:
       '@jeswr/rdf-serialize':
@@ -5227,6 +5288,46 @@ importers:
         specifier: ^4.1.8
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  packages/solid-docs:
+    dependencies:
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../suite-vocab
+      '@rdfjs/wrapper':
+        specifier: 0.34.0
+        version: 0.34.0
+      n3:
+        specifier: 2.0.3
+        version: 2.0.3
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@rdfjs/types':
+        specifier: 2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
   packages/solid-dpop:
     dependencies:
       jose:
@@ -5660,6 +5761,46 @@ importers:
         specifier: ^4.1.8
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  packages/solid-mail:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.0.0
+        version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@jeswr/pod-connectors':
+        specifier: workspace:*
+        version: link:../pod-connectors
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
   packages/solid-mcp:
     dependencies:
       '@jeswr/guarded-fetch':
@@ -5993,6 +6134,49 @@ importers:
       vitest:
         specifier: ^4.0.0
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@24.13.3)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/solid-photos:
+    dependencies:
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../suite-vocab
+      '@rdfjs/wrapper':
+        specifier: 0.34.0
+        version: 0.34.0
+      n3:
+        specifier: 2.0.3
+        version: 2.0.3
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@rdfjs/types':
+        specifier: 2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/solid-places:
     dependencies:
@@ -6454,6 +6638,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../fetch-rdf
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -6467,6 +6654,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.0.0
         version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
       '@jeswr/rdf-engine':
         specifier: workspace:*
         version: link:../rdf-engine
@@ -20408,10 +20598,6 @@ packages:
     resolution: {integrity: sha512-OIDwaflOaq4wC6YlPBy2L6ceKeKuF7DeTxx+jPzv1FHn9tCZ0ZwSRnUBxD05E3yed46fv/FWJbvR+Ud7x0L7zw==}
     engines: {node: '>=16.0.0', npm: '>=8.0.0'}
 
-  yjs@13.6.31:
-    resolution: {integrity: sha512-Eq+5BRfbeGyqGVrTJL3bEcr8gKkxPuyuoHmAwpk52fDb8kOVMrfVSTRPd6yiGgX5Fskb96qCRjzjbRjrL4YEnw==}
-    engines: {node: '>=16.0.0', npm: '>=8.0.0'}
-
   ylru@1.4.0:
     resolution: {integrity: sha512-2OQsPNEmBCvXuFlIni/a+Rn+R2pHW9INm0BxXJ4hVDA8TirqMj+J/Rp9ItLatT/5pZqWwefVrTQcHpixsxnVlA==}
     engines: {node: '>= 4.0.0'}
@@ -33305,7 +33491,7 @@ snapshots:
       '@typescript-eslint/parser': 8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
       eslint: 9.39.5(jiti@2.7.0)
       eslint-import-resolver-node: 0.3.10
-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))
+      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5(jiti@2.7.0))
       eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0))
       eslint-plugin-jsx-a11y: 6.10.2(eslint@9.39.5(jiti@2.7.0))
       eslint-plugin-react: 7.37.5(eslint@9.39.5(jiti@2.7.0))
@@ -33322,7 +33508,7 @@ snapshots:
       '@next/eslint-plugin-next': 16.2.10
       eslint: 9.39.5(jiti@2.7.0)
       eslint-import-resolver-node: 0.3.10
-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))
+      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5(jiti@2.7.0))
       eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0))
       eslint-plugin-jsx-a11y: 6.10.2(eslint@9.39.5(jiti@2.7.0))
       eslint-plugin-react: 7.37.5(eslint@9.39.5(jiti@2.7.0))
@@ -33365,21 +33551,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)):
-    dependencies:
-      '@nolyfill/is-core-module': 1.0.39
-      debug: 4.4.3
-      eslint: 9.39.5(jiti@2.7.0)
-      get-tsconfig: 4.14.0
-      is-bun-module: 2.0.0
-      stable-hash: 0.0.5
-      tinyglobby: 0.2.17
-      unrs-resolver: 1.12.2
-    optionalDependencies:
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0))
-    transitivePeerDependencies:
-      - supports-color
-
   eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)):
     dependencies:
       '@nolyfill/is-core-module': 1.0.39
@@ -33395,14 +33566,29 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.14.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)):
+  eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5(jiti@2.7.0)):
+    dependencies:
+      '@nolyfill/is-core-module': 1.0.39
+      debug: 4.4.3
+      eslint: 9.39.5(jiti@2.7.0)
+      get-tsconfig: 4.14.0
+      is-bun-module: 2.0.0
+      stable-hash: 0.0.5
+      tinyglobby: 0.2.17
+      unrs-resolver: 1.12.2
+    optionalDependencies:
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0))
+    transitivePeerDependencies:
+      - supports-color
+
+  eslint-module-utils@2.14.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
       '@typescript-eslint/parser': 8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
       eslint: 9.39.5(jiti@2.7.0)
       eslint-import-resolver-node: 0.3.10
-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))
+      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5(jiti@2.7.0))
     transitivePeerDependencies:
       - supports-color
 
@@ -33427,7 +33613,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 9.39.5(jiti@2.7.0)
       eslint-import-resolver-node: 0.3.10
-      eslint-module-utils: 2.14.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))
+      eslint-module-utils: 2.14.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))
       hasown: 2.0.4
       is-core-module: 2.16.2
       is-glob: 4.0.3
@@ -40156,10 +40342,6 @@ snapshots:
       fd-slicer: 1.1.0
 
   yjs@13.6.27:
-    dependencies:
-      lib0: 0.2.117
-
-  yjs@13.6.31:
     dependencies:
       lib0: 0.2.117
 

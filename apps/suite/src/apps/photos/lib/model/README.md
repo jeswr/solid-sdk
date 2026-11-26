@@ -1,9 +1,13 @@
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # Photos model (PHO-00)
 
-Hook-free model for PHO-01. The EXIF and photograph accessors were ported from
-`apps/pod-photos/src/photos`; albums retain legacy `schema:hasPart` reads and write ordered
-`schema:ListItem` membership. `parsePhotos` also reads the Pod Manager Google Photos connector's
+The RDF model is generated in [`@jeswr/solid-photos`](../../../../../../../packages/solid-photos/README.md).
+The local `album`, `exif`, `photograph`, `validation` and `vocab` modules only re-export
+that shared package. It owns photo/EXIF, album and trash build/parse/serialization;
+its minimal typed views preserve blank-node capture points and ListItems.
+This directory keeps app I/O, upload preparation, timeline grouping and trash orchestration.
+Albums retain legacy `schema:hasPart` reads and write ordered `schema:ListItem` membership. `parsePhotos` also reads the Pod Manager Google Photos connector's
 multi-subject `schema:ImageObject` documents. All new photos use `schema:Photograph`.
 Album ListItems and capture points may be named or blank RDF nodes; reads preserve their terms.
 Optional technical metadata is converted field by field, dropping invalid values/dates while
@@ -63,4 +67,5 @@ to PHO-01's SDK adapter. Day/month groups use UTC keys; fixed item URLs stay as 
 07-parity-backlog. See repository `QUESTIONS.md` for conservative interpretations.
 
 Run `pnpm --filter @jeswr/app-suite test:coverage` for a per-file 100% statement, branch,
-function, and line coverage gate over this directory.
+function, and line coverage gate over the remaining app orchestration. Model oracle,
+compatibility and byte-for-byte generation tests also run in the shared package.

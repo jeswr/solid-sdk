@@ -19,6 +19,7 @@ import {
   type MonetaryAmountWrapper,
   type TransactionWrapper,
 } from "./generated/model.js";
+import { required } from "./records.js";
 import { V } from "./vocab.js";
 
 const decimalLexical = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
@@ -56,6 +57,18 @@ export function rdfAmount(term: TermWrapper): string {
   return `${text.startsWith("-") ? "-" : ""}${decimal.replace(/^0+(?=\d)/, "")}`;
 }
 
+/** Read a single-valued predicate; several values are ambiguous and reject the record. */
+export function singleValue<T>(
+  node: TermWrapper,
+  predicate: string,
+  project: (term: TermWrapper) => T,
+): T | undefined {
+  let seen = 0;
+  for (const _quad of node.dataset.match(TermAs.term(node), node.factory.namedNode(predicate)))
+    if (++seen > 1) required(undefined);
+  return OptionalFrom.subjectPredicate(node, predicate, project);
+}
+
 /** Compatibility view: only blank-node links, exact decimals and lexical dates are local.
  * Ordinary fields reuse the generated property descriptors, including all runtime guards.
  */
@@ -73,7 +86,7 @@ export class MoneyNode extends TermWrapper {
   declare description: TransactionWrapper["description"];
   declare currency: MonetaryAmountWrapper["currency"];
   get amountNode(): Term | undefined {
-    return OptionalFrom.subjectPredicate(this, V.amountNode, TermAs.term);
+    return singleValue(this, V.amountNode, TermAs.term);
   }
   set amountNode(value: string | Term | undefined) {
     OptionalAs.object(this, V.amountNode, value, (reference, factory) =>
@@ -81,7 +94,7 @@ export class MoneyNode extends TermWrapper {
     );
   }
   get asOf(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, V.asOf, LiteralAs.string);
+    return singleValue(this, V.asOf, LiteralAs.string);
   }
   set asOf(value: string | undefined) {
     OptionalAs.object(this, V.asOf, value, (text, factory) =>
@@ -92,7 +105,7 @@ export class MoneyNode extends TermWrapper {
     );
   }
   get postingTime(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, V.postingTime, LiteralAs.string);
+    return singleValue(this, V.postingTime, LiteralAs.string);
   }
   set postingTime(value: string | undefined) {
     OptionalAs.object(this, V.postingTime, value, (text, factory) =>
@@ -103,7 +116,7 @@ export class MoneyNode extends TermWrapper {
     );
   }
   get amount(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, V.amount, rdfAmount);
+    return singleValue(this, V.amount, rdfAmount);
   }
   set amount(value: string | undefined) {
     OptionalAs.object(this, `${NS.FINANCE}amount`, undefined, LiteralFrom.string);

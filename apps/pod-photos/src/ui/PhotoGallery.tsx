@@ -31,6 +31,16 @@ export interface PhotoGalleryProps {
   title?: string;
 }
 
+/** Pod documents are untrusted: only http(s) image IRIs may reach an <img src>. */
+function safeImageSrc(value: string): string | undefined {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Render a Solid photo container as a navigable thumbnail gallery. Sub-folders
  * are buttons (click to descend); photos are figures with the image binary
@@ -113,7 +123,7 @@ export function PhotoGallery({ rootUrl, fetch, title }: PhotoGalleryProps) {
           {photos.map((entry) => {
             const heading = photoTitle(entry.url, entry.photo);
             const dimensions = photoDimensions(entry.photo);
-            const src = entry.photo.contentUrl;
+            const src = safeImageSrc(entry.photo.contentUrl);
             return (
               <li key={entry.url} className="pod-photos-tile">
                 <figure>

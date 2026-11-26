@@ -202,9 +202,10 @@ function serialize(dataset: DatasetCore): Promise<string> {
   );
 }
 
-function issueSubject(dataset: DatasetCore, docUrl: string): string {
+/** The issue's subject: the first IRI typed `wf:Task`. Pod data is untrusted, so a blank-node task is skipped (its label is not an IRI). */
+export function issueSubject(dataset: DatasetCore, docUrl: string): string {
   for (const q of dataset.match(null, DataFactory.namedNode(rdf("type")), DataFactory.namedNode(wf("Task")))) {
-    return q.subject.value;
+    if (q.subject.termType === "NamedNode") return q.subject.value;
   }
   return `${docUrl}${ISSUE_FRAGMENT}`;
 }
