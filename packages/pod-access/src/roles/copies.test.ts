@@ -354,6 +354,30 @@ describe("removeCopiedGrants", () => {
     expect(result.failed.map((f) => f.url)).toEqual([sub]);
   });
 
+  it("keeps a copy from the folder itself below a folder whose own access could not be read", async () => {
+    const mem = memoryAccess("wac");
+    mem.attach(folder, acl(ownerRule));
+    mem.put(folder, listing("sub/"));
+    mem.advertise(sub);
+    mem.put(sub, listing("x.ttl"));
+    mem.advertise(nested);
+    mem.put(
+      `${nested}.acl`,
+      acl(
+        `${rule("owner", [owner], "acl:Read, acl:Write, acl:Control", false, "x.ttl")}` +
+          `<#copy> a acl:Authorization; acl:agent <${bob}>; acl:accessTo <x.ttl>; acl:mode acl:Read; <${MATERIALIZED_FROM}> <${folder}.acl>.\n`,
+      ),
+    );
+    // sub/ may have an ACL of its own that still grants Bob, so its places cannot be judged.
+    mem.intercept((url, init) =>
+      url === sub && init.method === "HEAD" ? new Response(null, { status: 500 }) : undefined,
+    );
+    const result = await removeCopiedGrants(folder, bobRef, { ...mem.options, webId: owner });
+    expect(result.removed).toEqual([]);
+    expect(result.remaining).toEqual([nested]);
+    expect(result.failed.map((f) => f.url)).toEqual([sub]);
+  });
+
   it("counts a listing describing another container first as incomplete", async () => {
     const { mem, options } = setup();
     mem.put(

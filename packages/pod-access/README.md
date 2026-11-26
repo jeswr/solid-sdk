@@ -627,7 +627,8 @@ no principal is removed. Rules the agent holds directly and copies from outside 
 never touched; any place where the agent still has some access is listed in `remaining`. Judging by
 current inheritance, not by the copy's `materializedFrom` markers, matters because a folder ACL
 added after the copy was made cuts off the folders it names; copies below a folder that
-could not be read are kept. A folder with no ACL of its own passes its parent's
+could not be read are kept. Because copies are judged by current inheritance, the sweep also narrows a copy
+of a grant that was not revoked when a newer folder ACL inside the folder no longer gives it. A folder with no ACL of its own passes its parent's
 answer down. Only rules naming the agent are read, so
 another principal's conditional rule (`acl:origin`) never blocks the sweep, while a conditional
 rule naming the agent fails that place. Each
