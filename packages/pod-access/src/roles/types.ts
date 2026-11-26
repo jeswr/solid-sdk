@@ -49,6 +49,21 @@ export interface AccessModesSnapshot {
   readonly governedBy: string | null;
   readonly version: GrantSnapshot["version"];
 }
+/**
+ * A folder's roles per scope: on the folder itself and on its contents (members). `version` is
+ * the same opaque read token as `GrantSnapshot.version`.
+ */
+export interface ScopedGrantSnapshot {
+  readonly url: string;
+  folder: RoleGrant[];
+  contents: RoleGrant[];
+  readonly version: GrantSnapshot["version"];
+}
+/** The full desired role set for each scope of one folder. */
+export interface ScopedGrantSelection {
+  folder: RoleGrant[];
+  contents: RoleGrant[];
+}
 /** Separate permission targets: resource body, comments container, and own ACR. */
 export interface RoleModes {
   resource: readonly Mode[];

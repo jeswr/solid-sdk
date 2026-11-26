@@ -79,8 +79,8 @@ describe("public export boundary", () => {
         [
           "addGrant", "ensurePrivateContainerAccess", "grantsWithRoles", "isGrantableTarget",
           "isRoleError", "isSealed", "modesToRole", "movePreservingAccess", "readAccessModes",
-          "readGrants", "removeGrant", "rolesToModes", "sealAccess", "sealDataset", "setGrants",
-          "unsealAccess", "verifyPrivateDemoAccess",
+          "readGrants", "readScopedGrants", "removeGrant", "rolesToModes", "sealAccess", "sealDataset",
+          "setGrants", "setScopedGrants", "unsealAccess", "verifyPrivateDemoAccess",
         ].sort());
       assert.equal(roles.modesToRole(["read"], "resource"), "viewer");
       const requests = await load("@jeswr/pod-access/requests-solid");

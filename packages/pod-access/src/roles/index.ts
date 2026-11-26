@@ -8,8 +8,10 @@ export {
   grantsWithRoles,
   readAccessModes,
   readGrants,
+  readScopedGrants,
   removeGrant,
   setGrants,
+  setScopedGrants,
 } from "./client.js";
 export { isRoleError } from "./errors.js";
 export { modesToRole, rolesToModes } from "./mapping.js";
@@ -36,6 +38,8 @@ export type {
   RoleGrant,
   RoleModes,
   RolesOptions,
+  ScopedGrantSelection,
+  ScopedGrantSnapshot,
   SetGrantsOptions,
   SetGrantsResult,
 } from "./types.js";
