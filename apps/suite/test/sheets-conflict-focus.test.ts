@@ -163,33 +163,66 @@ it("opens a private shared workbook with the account after the consent click", a
   const sessionFetch = vi.fn<typeof fetch>(async (input, init) =>
     access ? pod.fetch(input, init) : new Response(null, { status: 403 }),
   );
-  const grantResource = vi.fn(async (_url: string) => {});
-  mocks.service = createWorkbookService({
+  const revokeIndex = vi.fn();
+  const revokeSnapshot = vi.fn();
+  const grantResource = vi.fn(async (url: string) => ({
+    revoke: url.endsWith("index.ttl") ? revokeIndex : revokeSnapshot,
+  }));
+  const reader = {
     ...options,
     podRoot: "https://pod.example/bob/",
+    webId: "https://pod.example/bob/#me",
     fetch: sessionFetch,
     publicFetch,
     grantResource,
-  });
+  };
+  mocks.service = createWorkbookService(reader);
   const editor = await mount(h(SheetEditor, { container: book.container }));
   const alert = () => editor.host.querySelector('[role="alert"]')?.textContent ?? "";
-  const button = () =>
-    [...editor.host.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("Open with your account"),
-    );
-  expect(alert()).toContain(
-    `${new URL(book.container).host}${new URL(book.container).pathname} only`,
-  );
+  expect(alert()).toContain("This spreadsheet is private");
   expect(sessionFetch).not.toHaveBeenCalled();
-  await click(button() as HTMLButtonElement);
+  await click(button(editor.host, "Open with your account"));
   await vi.waitFor(() => expect(alert()).toContain("Ask its owner to share it with you."));
-  expect(grantResource).toHaveBeenCalledExactlyOnceWith(book.container);
-  expect(button()).toBeUndefined();
+  expect(revokeIndex).toHaveBeenCalledOnce();
+  expect(revokeSnapshot).toHaveBeenCalledOnce();
   access = true;
-  await click(
-    [...editor.host.querySelectorAll("button")].find((b) => b.textContent === "Retry") as Element,
-  );
+  sessionFetch.mockClear();
+  await click(button(editor.host, "Retry"));
+  expect(sessionFetch).not.toHaveBeenCalled();
+  const address = new URL(book.container);
+  for (const name of ["index.ttl", "workbook.json"])
+    expect(alert()).toContain(`${address.host}${address.pathname}${name}`);
+  await click(button(editor.host, "Open with your account"));
   await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
+  await editor.unmount();
+});
+
+it("requires fresh consent when the active workbook reader changes", async () => {
+  const { book, options, pod } = await setup();
+  const reader = {
+    ...options,
+    podRoot: "https://pod.example/bob/",
+    webId: "https://pod.example/bob/#me",
+    fetch: pod.fetch,
+    publicFetch: vi.fn(async () => new Response(null, { status: 401 })),
+    grantResource: vi.fn(async () => ({ revoke: vi.fn() })),
+  };
+  mocks.service = createWorkbookService(reader);
+  const editor = await mount(h(SheetEditor, { container: book.container }));
+  await click(button(editor.host, "Open with your account"));
+  await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
+  const nextFetch = vi.fn(async () => new Response(null, { status: 403 }));
+  const nextGrant = vi.fn(async () => ({ revoke: vi.fn() }));
+  mocks.service = createWorkbookService({
+    ...reader,
+    webId: "https://pod.example/carol/#me",
+    fetch: nextFetch,
+    grantResource: nextGrant,
+  });
+  await editor.render(h(SheetEditor, { container: book.container }));
+  expect(nextFetch).not.toHaveBeenCalled();
+  await click(button(editor.host, "Open with your account"));
+  expect(nextGrant).toHaveBeenCalledTimes(2);
   await editor.unmount();
 });
 

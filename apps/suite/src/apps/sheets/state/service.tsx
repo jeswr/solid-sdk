@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import { createContext, type ReactNode, useContext, useMemo } from "react";
@@ -25,7 +26,12 @@ export function WorkbookServiceProvider({
       }),
     [session],
   );
-  return <ServiceContext value={service}>{children}</ServiceContext>;
+  const accountId = (session.mode === "solid" && session.accountId) || session.webId;
+  return (
+    <ServiceContext key={accountId} value={service}>
+      {children}
+    </ServiceContext>
+  );
 }
 export function useWorkbookService() {
   const service = useContext(ServiceContext);

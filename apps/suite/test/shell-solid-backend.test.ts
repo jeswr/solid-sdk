@@ -1109,7 +1109,10 @@ describe("Solid shell over pod-auth", () => {
     const grantResource = vi.fn<NonNullable<PodAuth["grantResource"]>>(async () => grant);
     const revokeResource = vi.fn<NonNullable<PodAuth["revokeResource"]>>(() => true);
     Object.assign(h.auth, { grantResource, revokeResource });
-    await h.backend.grantResource(account, shared);
+    const handle = await h.backend.grantResource(account, shared);
+    handle.revoke();
+    expect(revokeResource).toHaveBeenCalledExactlyOnceWith(grant);
+    revokeResource.mockClear();
     expect(grantResource).toHaveBeenCalledExactlyOnceWith(shared);
     for (const other of [
       { ...account, id: "solid:other" },
@@ -1125,6 +1128,27 @@ describe("Solid shell over pod-auth", () => {
     await expect(pending).rejects.toThrow("Sign in to continue");
     expect(revokeResource).toHaveBeenCalledExactlyOnceWith(grant);
     await expect(h.backend.grantResource(account, shared)).rejects.toThrow("Sign in to continue");
+  });
+
+  it("keeps a replacement grant when an earlier read is denied late", async () => {
+    const h = harness();
+    const url = "https://pod.example/bob/notes/shared.ttl";
+    const account = await h.backend.signIn({ issuer: alice.issuer });
+    const first = { root: url, origin: new URL(url).origin, created: 1 };
+    let current = first;
+    const revokeResource = vi.fn(() => true);
+    Object.assign(h.auth, {
+      grantResource: async () => current,
+      grants: () => [current],
+      revokeResource,
+    });
+    const old = await h.backend.grantResource(account, url);
+    current = { ...first, created: 2 };
+    const replacement = await h.backend.grantResource(account, url);
+    old.revoke();
+    expect(revokeResource).not.toHaveBeenCalled();
+    replacement.revoke();
+    expect(revokeResource).toHaveBeenCalledExactlyOnceWith(current);
   });
 
   it("drops a grant recorded after another tab replaced the core's session", async () => {
